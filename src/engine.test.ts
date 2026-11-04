@@ -85,7 +85,21 @@ describe('prompts', () => {
     expect(snap.prompt?.block.id).toBe('a');
 
     s.days[KEY] = { ...emptyDay(), log: { a: 'done' } };
-    expect(snapshot(s, at('09:02')).prompt).toBeNull();
+    expect(snapshot(s, at('09:02')).prompt).toMatchObject({ kind: 'intention', block: { id: 'b' } });
+  });
+
+  it('asks for an intention once per block, only with time left, and never escalates it', () => {
+    const s = stateWith([block('a', '08:00', '09:00')]);
+    const asked = snapshot(s, at('08:10')).prompt;
+    expect(asked?.kind).toBe('intention');
+    expect(escalation(asked, emptyDay(), s.settings, at('08:50'))).toBe('none');
+    expect(snapshot(s, at('08:57')).prompt).toBeNull();
+
+    s.days[KEY] = { ...emptyDay(), intentions: { a: { text: '', todos: [], dismissed: true } } };
+    expect(snapshot(s, at('08:10')).prompt).toBeNull();
+
+    const off = stateWith(s.routine, (st) => (st.settings.askIntention = false));
+    expect(snapshot(off, at('08:10')).prompt).toBeNull();
   });
 
   it('asks to start an optional block, and never reviews one nobody started', () => {

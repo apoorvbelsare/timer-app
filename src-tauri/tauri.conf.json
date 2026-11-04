@@ -37,6 +37,17 @@
         "visible": false
       },
       {
+        "label": "focus",
+        "url": "focus.html",
+        "title": "Focus",
+        "width": 960,
+        "height": 700,
+        "minWidth": 560,
+        "minHeight": 560,
+        "center": true,
+        "visible": false
+      },
+      {
         "label": "overlay",
         "url": "overlay.html",
         "title": "Time to switch",

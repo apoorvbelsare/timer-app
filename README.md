@@ -11,6 +11,11 @@ A visual routine timer for ADHD brains. It sits in the corner of your screen all
 - **Just for today.** Skip, move or add a one-off block for today only. The routine stays as it is.
 - **Heads-ups.** A notification and soft chime 10, 5 and 1 minutes before a block ends (configurable), and before the next block during free time.
 - **Hyperfocus guard.** When a block ends, the widget asks how it went (Done / Partly / Skipped). If nobody answers, a notification follows after 5 minutes and a full-screen "time to switch" card after 10. "I'm still on it" gives you 10 more minutes.
+- **Session ritual.** Inspired by Flown's set-an-intention → work → share-how-it-went loop.
+  - *Before:* when a block starts, the widget asks for your intention. Not now is always fine.
+  - *During:* focus mode gives a big ring, your intention and to-dos, and a small flock of birds drifting overhead for company. You can add ambient rain, forest or brown noise, all generated in the app.
+  - *After:* the "How did it go?" card takes a one-line note.
+- **Recharge breaks.** A 2-minute guided breathing exercise and a 3-minute stretch sequence, offered in free time between blocks.
 - **Tray app.** Lives in the system tray and starts with Windows. The tray menu can hide the widget or lock it so clicks pass through.
 
 ## Running it
@@ -37,7 +42,9 @@ npm run tauri build
 | `src/model.ts` | Data types, time helpers, the sample routine |
 | `src/engine.ts` | Pure logic: today's plan, the current block, prompts, escalation, overlap checks |
 | `src/store.ts` | Loads and saves state through the Rust side and keeps windows in sync |
-| `src/widget.ts`, `planner.ts`, `overlay.ts` | The three windows |
+| `src/widget.ts`, `planner.ts`, `overlay.ts`, `focus.ts` | The four windows |
+| `src/sounds.ts`, `birds.ts` | Synthesised ambient sound and the flock animation |
+| `src/styles/theme.css` | Shared palette and fonts (Fraunces + Nunito, bundled) |
 | `src-tauri/` | The Tauri shell: tray menu, state file, plugins |
 
 State is one JSON file at `%APPDATA%\com.apoorvbelsare.timer\state.json`.

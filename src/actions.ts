@@ -1,17 +1,64 @@
-import { type AppState, type BlockStatus, type DayRecord, SNOOZE_MS, emptyDay } from './model';
+import { type AppState, type BlockStatus, type DayRecord, type Intention, SNOOZE_MS, emptyDay, newId } from './model';
 import { update } from './store';
 
-/** Changes shared by the widget, planner and overlay. */
+/** Changes shared by the widget, planner, overlay and focus windows. */
 
 export function ensureDay(draft: AppState, key: string): DayRecord {
   return (draft.days[key] ??= emptyDay());
 }
 
-export function logBlock(key: string, id: string, status: BlockStatus | null) {
+/** Log how a block went, with an optional one-line note. */
+export function logBlock(key: string, id: string, status: BlockStatus | null, note?: string) {
   return update((d) => {
     const day = ensureDay(d, key);
     if (status) day.log[id] = status;
     else delete day.log[id];
+    if (note?.trim()) day.notes[id] = note.trim();
+  });
+}
+
+export function setNote(key: string, id: string, note: string) {
+  return update((d) => {
+    const day = ensureDay(d, key);
+    if (note.trim()) day.notes[id] = note.trim();
+    else delete day.notes[id];
+  });
+}
+
+function ensureIntention(day: DayRecord, id: string): Intention {
+  return (day.intentions[id] ??= { text: '', todos: [], dismissed: false });
+}
+
+export function setIntention(key: string, id: string, text: string) {
+  return update((d) => {
+    ensureIntention(ensureDay(d, key), id).text = text.trim();
+  });
+}
+
+export function dismissIntention(key: string, id: string) {
+  return update((d) => {
+    ensureIntention(ensureDay(d, key), id).dismissed = true;
+  });
+}
+
+export function addTodo(key: string, id: string, text: string) {
+  if (!text.trim()) return Promise.resolve();
+  return update((d) => {
+    ensureIntention(ensureDay(d, key), id).todos.push({ id: newId(), text: text.trim(), done: false });
+  });
+}
+
+export function toggleTodo(key: string, id: string, todoId: string) {
+  return update((d) => {
+    const todo = ensureIntention(ensureDay(d, key), id).todos.find((t) => t.id === todoId);
+    if (todo) todo.done = !todo.done;
+  });
+}
+
+export function removeTodo(key: string, id: string, todoId: string) {
+  return update((d) => {
+    const intention = ensureIntention(ensureDay(d, key), id);
+    intention.todos = intention.todos.filter((t) => t.id !== todoId);
   });
 }
 

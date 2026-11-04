@@ -1,22 +1,28 @@
+import '@fontsource-variable/fraunces';
+import '@fontsource-variable/nunito';
 import { enable as enableAutostart } from '@tauri-apps/plugin-autostart';
 import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
+import { emit } from '@tauri-apps/api/event';
 import { Window, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
-import { logBlock, skipToday, snooze, startBlock } from './actions';
+import { dismissIntention, logBlock, setIntention, skipToday, snooze, startBlock } from './actions';
 import { chime, notify, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
 import { type Snapshot, dayRecord, escalation, snapshot } from './engine';
+import type { FocusMode } from './focus';
 import { formatDuration, minuteOfDay } from './model';
+import { CIRCUMFERENCE, ringColor, ringRemaining, ringText } from './ring';
 import { getState, inTauri, initStore, subscribe, update, wasFirstRun } from './store';
 import './styles/widget.css';
 
-const COMPACT = { w: 320, h: 128 };
-const EXPANDED = { w: 320, h: 222 };
-const CIRCUMFERENCE = 2 * Math.PI * 42;
+const WIDTH = 320;
+/** Tallest the widget gets: with the intention or review card open */
+const MAX_HEIGHT = 260;
 
 const $ = (id: string) => document.getElementById(id)!;
 const app = $('app');
 const arc = $('arc') as unknown as SVGCircleElement;
 const promptEl = $('prompt');
+const extrasEl = $('extras');
 
 const win = inTauri ? getCurrentWindow() : null;
 
@@ -31,27 +37,23 @@ async function openPlanner() {
   await planner?.setFocus();
 }
 
+async function openFocus(mode: FocusMode = 'focus') {
+  if (!inTauri) {
+    window.open(`/focus.html#${mode}`, 'focus');
+    return;
+  }
+  const focus = await Window.getByLabel('focus');
+  await focus?.show();
+  await focus?.unminimize();
+  await focus?.setFocus();
+  await emit('focus-mode', mode);
+}
+
 // ── Rendering ────────────────────────────────────────────────────────────────
 
-function ringText(ms: number): [string, string] {
-  if (ms < 60_000) return [String(Math.max(0, Math.ceil(ms / 1000))), 'sec'];
-  const minutes = Math.ceil(ms / 60_000);
-  if (minutes < 60) return [String(minutes), 'min'];
-  return [`${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`, 'left'];
-}
-
-/** The ring warms up as the end gets close: block colour, then amber, then coral. */
-function ringColor(s: Snapshot): string {
-  if (!s.current) return 'var(--muted)';
-  if (s.remainingMs <= 60_000) return 'var(--coral)';
-  if (s.remainingMs <= 5 * 60_000) return 'var(--amber)';
-  return s.current.color;
-}
-
 function render(s: Snapshot) {
-  const { routine } = getState();
-  const remaining = s.current || s.next ? 1 - s.progress : 0;
-  arc.style.strokeDasharray = `${CIRCUMFERENCE * remaining} ${CIRCUMFERENCE}`;
+  const state = getState();
+  arc.style.strokeDasharray = `${CIRCUMFERENCE * ringRemaining(s)} ${CIRCUMFERENCE}`;
   arc.style.stroke = ringColor(s);
   app.classList.toggle('waiting', s.awaitingStart);
   app.classList.toggle('closing', !!s.current && s.remainingMs <= 60_000);
@@ -61,15 +63,19 @@ function render(s: Snapshot) {
   $('ring-unit').textContent = unit;
 
   const nextLine = s.next ? `Next · ${s.next.name} ${s.next.start}` : '';
-  if (routine.length === 0) {
+  if (state.routine.length === 0 && s.plan.length === 0) {
     setText('No routine yet', '', 'Open the planner to build your day', '');
     $('ring-value').textContent = '+';
   } else if (s.current && s.awaitingStart) {
     setText(s.current.name, 'Optional · start when you’re ready', `until ${s.current.end}`, nextLine);
   } else if (s.current) {
+    // A running step wins; otherwise remind them what they meant to do
+    const intention = dayRecord(state, s.key).intentions[s.current.id]?.text;
     const step = s.step
       ? `${s.step.step.name} · ${formatDuration(s.step.remainingMs)} (${s.step.index + 1}/${s.current.steps.length})`
-      : '';
+      : intention
+        ? `→ ${intention}`
+        : '';
     setText(s.current.name, step, `${formatDuration(s.remainingMs)} left · until ${s.current.end}`, nextLine);
   } else if (s.next) {
     setText('Free time', '', `until ${s.next.start}`, nextLine);
@@ -78,6 +84,7 @@ function render(s: Snapshot) {
   }
 
   renderStrip(s);
+  renderExtras(s);
   renderPrompt(s);
 }
 
@@ -117,6 +124,24 @@ function renderStrip(s: Snapshot) {
   );
 }
 
+/** Free time with room to spare is a good moment for a recharge break. */
+let extrasShown = false;
+function renderExtras(s: Snapshot) {
+  const show = !s.current && !!s.next && s.remainingMs > 3 * 60_000 && !s.prompt;
+  if (show === extrasShown) return;
+  extrasShown = show;
+  extrasEl.hidden = !show;
+  extrasEl.replaceChildren(
+    ...(show
+      ? [
+          h('span', {}, 'Recharge'),
+          h('button', { class: 'chip', onClick: () => openFocus('breathe') }, 'Breathe · 2 min'),
+          h('button', { class: 'chip', onClick: () => openFocus('stretch') }, 'Stretch · 3 min'),
+        ]
+      : []),
+  );
+}
+
 let promptKey = '';
 
 function renderPrompt(s: Snapshot) {
@@ -125,7 +150,6 @@ function renderPrompt(s: Snapshot) {
   if (key === promptKey) return;
   promptKey = key;
   promptEl.hidden = !p;
-  void resize(p ? EXPANDED : COMPACT);
   if (!p) return promptEl.replaceChildren();
 
   if (p.kind === 'start') {
@@ -138,26 +162,50 @@ function renderPrompt(s: Snapshot) {
         h('button', { onClick: () => skipToday(s.key, p.block.id) }, 'Skip today'),
       ),
     );
-  } else {
+  } else if (p.kind === 'intention') {
+    const input = h('input', {
+      placeholder: 'One thing you want to get done…',
+      onKeydown: (e: KeyboardEvent) => e.key === 'Enter' && save(),
+    });
+    const save = () => (input.value.trim() ? setIntention(s.key, p.block.id, input.value) : dismissIntention(s.key, p.block.id));
     promptEl.replaceChildren(
-      h('p', {}, h('strong', {}, p.block.name), ' ended. How did it go?'),
+      h('p', {}, 'Starting ', h('strong', {}, p.block.name), '. What’s your intention?'),
+      input,
       h(
         'div',
         { class: 'actions' },
-        h('button', { class: 'primary', onClick: () => logBlock(s.key, p.block.id, 'done') }, 'Done'),
-        h('button', { onClick: () => logBlock(s.key, p.block.id, 'partly') }, 'Partly'),
-        h('button', { onClick: () => logBlock(s.key, p.block.id, 'skipped') }, 'Skipped'),
+        h('button', { class: 'primary', onClick: save }, 'Set'),
+        h('button', { onClick: () => dismissIntention(s.key, p.block.id) }, 'Not now'),
+        h('button', { class: 'quiet', title: 'Open focus mode', onClick: () => void openFocus() }, 'Focus'),
+      ),
+    );
+  } else {
+    const note = h('input', { placeholder: 'A line on how it went (optional)' });
+    const answer = (status: 'done' | 'partly' | 'skipped') => () => logBlock(s.key, p.block.id, status, note.value);
+    promptEl.replaceChildren(
+      h('p', {}, h('strong', {}, p.block.name), ' ended. How did it go?'),
+      note,
+      h(
+        'div',
+        { class: 'actions' },
+        h('button', { class: 'primary', onClick: answer('done') }, 'Done'),
+        h('button', { onClick: answer('partly') }, 'Partly'),
+        h('button', { onClick: answer('skipped') }, 'Skipped'),
         h('button', { class: 'quiet', title: 'Hold reminders for 10 minutes', onClick: () => snooze(s.key, p.block.id) }, '+10'),
       ),
     );
   }
 }
 
-let size = COMPACT;
-async function resize(next: typeof COMPACT) {
-  if (next === size) return;
-  size = next;
-  await win?.setSize(new LogicalSize(next.w, next.h));
+/** The window follows the card's height, so the widget never clips or leaves a gap. */
+function fitWindow() {
+  let height = 0;
+  new ResizeObserver(() => {
+    const next = Math.min(MAX_HEIGHT, Math.ceil(app.getBoundingClientRect().height) + 8);
+    if (next === height) return;
+    height = next;
+    void win?.setSize(new LogicalSize(WIDTH, next));
+  }).observe(app);
 }
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
@@ -236,12 +284,12 @@ async function placeWidget() {
   if (!win) return;
   const saved = getState().settings.widgetPos;
   if (saved) return win.setPosition(new PhysicalPosition(saved.x, saved.y));
-  // Bottom-right, with room above the taskbar for the expanded card
+  // Bottom-right, with room above the taskbar for the tallest card
   const monitor = await currentMonitor();
   if (!monitor) return;
   const scale = monitor.scaleFactor;
-  const x = monitor.position.x + monitor.size.width - Math.round((COMPACT.w + 24) * scale);
-  const y = monitor.position.y + monitor.size.height - Math.round((EXPANDED.h + 72) * scale);
+  const x = monitor.position.x + monitor.size.width - Math.round((WIDTH + 24) * scale);
+  const y = monitor.position.y + monitor.size.height - Math.round((MAX_HEIGHT + 72) * scale);
   await win.setPosition(new PhysicalPosition(x, y));
 }
 
@@ -265,16 +313,19 @@ async function main() {
   await initStore();
   await placeWidget();
   rememberPosition();
+  fitWindow();
   unlockAudioOnClick();
 
   app.addEventListener('mousedown', (e) => {
-    if (e.button === 0 && !(e.target as HTMLElement).closest('button')) void win?.startDragging();
+    if (e.button === 0 && !(e.target as HTMLElement).closest('button, input')) void win?.startDragging();
   });
-  app.addEventListener('dblclick', () => void openPlanner());
+  app.addEventListener('dblclick', (e) => {
+    if (!(e.target as HTMLElement).closest('button, input')) void openPlanner();
+  });
   $('open-planner').addEventListener('click', () => void openPlanner());
+  $('open-focus').addEventListener('click', () => void openFocus());
 
   subscribe((state) => {
-    promptKey = ''; // the answer may have changed what the card should offer
     if (state.settings.widgetPos === null) void placeWidget();
     tick();
   });

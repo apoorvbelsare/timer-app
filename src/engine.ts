@@ -30,9 +30,10 @@ export interface StepInfo {
  * `review`: a block ended and hasn't been logged yet, which doubles as the
  * "did you actually switch?" check against hyperfocus.
  * `start`: an optional block is on and waiting for Start or Skip.
+ * `intention`: a block has begun; what do you mean to get done? Never nags.
  */
 export interface Prompt {
-  kind: 'start' | 'review';
+  kind: 'start' | 'review' | 'intention';
   block: Planned;
   sinceMs: number;
 }
@@ -141,13 +142,17 @@ export function snapshot(state: AppState, now: number): Snapshot {
     totalMs,
     progress,
     step,
-    prompt: pickPrompt(plan, rec, current, awaitingStart, now),
+    prompt: pickPrompt(plan, rec, state.settings, current, awaitingStart, now),
   };
 }
+
+/** Not worth asking for an intention with less than this left in the block. */
+export const INTENTION_MIN_LEFT_MS = 5 * 60_000;
 
 function pickPrompt(
   plan: Planned[],
   rec: DayRecord,
+  settings: Settings,
   current: Planned | null,
   awaitingStart: boolean,
   now: number,
@@ -163,6 +168,14 @@ function pickPrompt(
   );
   if (review) return { kind: 'review', block: review, sinceMs: review.endMs };
   if (current && awaitingStart) return { kind: 'start', block: current, sinceMs: current.startMs };
+  if (
+    current &&
+    settings.askIntention &&
+    rec.intentions[current.id] === undefined &&
+    current.endMs - now > INTENTION_MIN_LEFT_MS
+  ) {
+    return { kind: 'intention', block: current, sinceMs: rec.startedAt[current.id] ?? current.startMs };
+  }
   return null;
 }
 
@@ -172,7 +185,7 @@ function pickPrompt(
  * Optional blocks only ever get the toast.
  */
 export function escalation(prompt: Prompt | null, rec: DayRecord, settings: Settings, now: number): Escalation {
-  if (!prompt) return 'none';
+  if (!prompt || prompt.kind === 'intention') return 'none';
   if (prompt.kind === 'start') return 'notify';
 
   const step = settings.escalateAfterMin * 60_000;

@@ -1,0 +1,27 @@
+/*
+ * Shared palette and type: a warm, outdoorsy calm. Cream paper, forest green,
+ * clay and ochre accents, a soft serif for headings and a rounded sans for the rest.
+ */
+:root {
+  --cream: #f6f1e7;
+  --paper: #fffdf8;
+  --sand: #ece4d3;
+  --forest: #2f5d50;
+  --forest-deep: #1f3b33;
+  --pine: #173029;
+  --sage: #9db8a0;
+  --clay: #c8693f;
+  --ochre: #e0a458;
+  --ink: #233029;
+  --ink-soft: #5f6d63;
+  --amber: #e0a458;
+  --coral: #d9734e;
+  --good: #4f8f6a;
+
+  --font-display: 'Fraunces Variable', Georgia, 'Times New Roman', serif;
+  --font-body: 'Nunito Variable', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}

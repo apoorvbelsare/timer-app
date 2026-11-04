@@ -27,6 +27,20 @@ export interface DayOverride {
   extra: Block[];
 }
 
+export interface Todo {
+  id: string;
+  text: string;
+  done: boolean;
+}
+
+/** What the person means to do in a block: the "before" of the session ritual. */
+export interface Intention {
+  text: string;
+  todos: Todo[];
+  /** Skipped the question; don't ask again for this block today */
+  dismissed: boolean;
+}
+
 export interface DayRecord {
   override: DayOverride;
   /** When an optional block was actually started */
@@ -34,7 +48,12 @@ export interface DayRecord {
   log: Record<string, BlockStatus>;
   /** "Still on it": hold the hyperfocus escalation until this time */
   snoozedUntil: Record<string, number>;
+  intentions: Record<string, Intention>;
+  /** One line on how a block went: the "after" of the ritual */
+  notes: Record<string, string>;
 }
+
+export type Ambient = 'off' | 'rain' | 'forest' | 'brown';
 
 export interface Settings {
   warnMinutes: number[];
@@ -42,6 +61,10 @@ export interface Settings {
   /** Minutes after a block ends before a toast; twice this before the overlay */
   escalateAfterMin: number;
   widgetPos: { x: number; y: number } | null;
+  /** Ask for an intention when a block starts */
+  askIntention: boolean;
+  ambient: Ambient;
+  ambientVolume: number;
 }
 
 export interface AppState {
@@ -51,14 +74,23 @@ export interface AppState {
   days: Record<string, DayRecord>;
 }
 
-export const PALETTE = ['#7c9cff', '#5fc4b0', '#b48cf2', '#f29e7c', '#e9c46a', '#8fb8de', '#e07fa8', '#9bc17a'];
+/** Earthy tones: sage, clay, ochre, dusk, heather, lake, rose, moss */
+export const PALETTE = ['#7fa88b', '#d08a5f', '#e2b25c', '#8f9fd1', '#b08cc0', '#6fb3b8', '#d9879a', '#a3b86c'];
 
 export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 export const SNOOZE_MS = 10 * 60_000;
 
 export function defaultSettings(): Settings {
-  return { warnMinutes: [10, 5, 1], chime: true, escalateAfterMin: 5, widgetPos: null };
+  return {
+    warnMinutes: [10, 5, 1],
+    chime: true,
+    escalateAfterMin: 5,
+    widgetPos: null,
+    askIntention: true,
+    ambient: 'off',
+    ambientVolume: 0.5,
+  };
 }
 
 export function defaultState(): AppState {
@@ -66,7 +98,14 @@ export function defaultState(): AppState {
 }
 
 export function emptyDay(): DayRecord {
-  return { override: { skip: [], times: {}, extra: [] }, startedAt: {}, log: {}, snoozedUntil: {} };
+  return {
+    override: { skip: [], times: {}, extra: [] },
+    startedAt: {},
+    log: {},
+    snoozedUntil: {},
+    intentions: {},
+    notes: {},
+  };
 }
 
 /** Fills in anything an older or hand-edited state file is missing. */
@@ -158,15 +197,21 @@ export function sampleRoutine(): Block[] {
     steps: steps.map(([stepName, minutes]) => ({ id: newId(), name: stepName, minutes })),
   });
   return [
-    block('Morning routine', '07:00', '07:45', PALETTE[1], everyDay, false, [
+    block('Morning routine', '07:00', '07:45', PALETTE[0], everyDay, false, [
       ['Water & meds', 5],
       ['Shower', 15],
       ['Get dressed', 10],
       ['Breakfast', 15],
     ]),
-    block('Deep work', '09:00', '12:00', PALETTE[0], weekdays),
-    block('Lunch', '13:00', '13:45', PALETTE[3], everyDay),
-    block('Study', '20:00', '21:00', PALETTE[2], everyDay, true),
+    block('Deep work', '09:00', '12:00', PALETTE[3], weekdays, false, [
+      ['Focus', 50],
+      ['Break', 10],
+      ['Focus', 50],
+      ['Break', 10],
+      ['Focus', 60],
+    ]),
+    block('Lunch', '13:00', '13:45', PALETTE[1], everyDay),
+    block('Study', '20:00', '21:00', PALETTE[4], everyDay, true),
     block('Wind down', '22:30', '23:00', PALETTE[5], everyDay, false, [
       ['Tidy up', 10],
       ['Plan tomorrow', 5],

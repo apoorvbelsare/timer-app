@@ -1,3 +1,5 @@
+import '@fontsource-variable/fraunces';
+import '@fontsource-variable/nunito';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { logBlock, snooze } from './actions';
 import { h } from './dom';
@@ -34,6 +36,8 @@ function render(s: Snapshot) {
     await fn();
     await hide();
   };
+  const note = h('input', { class: 'note', placeholder: 'A line on how it went (optional)' });
+  const log = (status: 'done' | 'partly' | 'skipped') => answer(() => logBlock(s.key, p.block.id, status, note.value));
   const now = s.current
     ? h('p', {}, 'You’re now in ', h('strong', {}, s.current.name), ` until ${s.current.end}.`)
     : s.next
@@ -46,12 +50,13 @@ function render(s: Snapshot) {
     h('p', { class: 'lead' }, h('strong', {}, p.block.name), ` ended ${formatDuration(s.now - p.block.endMs)} ago.`),
     now,
     h('h2', {}, `How did ${p.block.name} go?`),
+    note,
     h(
       'div',
       { class: 'actions' },
-      h('button', { class: 'primary', onClick: answer(() => logBlock(s.key, p.block.id, 'done')) }, 'Done'),
-      h('button', { onClick: answer(() => logBlock(s.key, p.block.id, 'partly')) }, 'Partly'),
-      h('button', { onClick: answer(() => logBlock(s.key, p.block.id, 'skipped')) }, 'Skipped'),
+      h('button', { class: 'primary', onClick: log('done') }, 'Done'),
+      h('button', { onClick: log('partly') }, 'Partly'),
+      h('button', { onClick: log('skipped') }, 'Skipped'),
     ),
     h('button', { class: 'snooze', onClick: answer(() => snooze(s.key, p.block.id)) }, 'I’m still on it — 10 more minutes'),
     h('p', { class: 'hint' }, 'Esc also gives you 10 more minutes'),

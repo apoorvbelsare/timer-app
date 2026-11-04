@@ -9,12 +9,26 @@
     <div class="shell">
       <nav class="nav">
         <div class="brand">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 1 9 9" /></svg>
+          <svg viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="16" r="13" class="brand-track" />
+            <path d="M16 3a13 13 0 1 1-11.3 19.4" class="brand-arc" />
+            <path d="M10.5 15.5c1.6-1.3 3-1.3 4.2 0 1.1-1.5 2.5-1.7 4.1-.5" class="brand-bird" />
+          </svg>
           Timer
         </div>
         <button data-view="today">Today</button>
         <button data-view="routine">Routine</button>
         <button data-view="settings">Settings</button>
+        <div class="nav-foot">
+          <button id="open-focus" class="focus-btn">
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 9.5c1.6-1.4 3-1.4 4.2 0 1-1.6 2.3-1.8 3.9-.6M8 3.5c1.2-.9 2.4-.9 3.6 0" /></svg>
+            Focus mode
+          </button>
+          <svg class="nav-hills" viewBox="0 0 200 70" preserveAspectRatio="none" aria-hidden="true">
+            <path d="M0 40 C 40 22 70 46 110 32 S 170 18 200 30 V70 H0 Z" class="hill-back" />
+            <path d="M0 56 C 50 40 90 62 140 50 S 185 44 200 50 V70 H0 Z" class="hill-front" />
+          </svg>
+        </div>
       </nav>
       <main id="view"></main>
     </div>

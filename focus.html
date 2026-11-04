@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Focus</title>
+  </head>
+  <body>
+    <canvas id="sky" aria-hidden="true"></canvas>
+    <div class="hills" aria-hidden="true">
+      <svg viewBox="0 0 1440 220" preserveAspectRatio="none">
+        <path class="hill-back" d="M0 120 C 240 60 420 150 700 100 S 1180 40 1440 110 V220 H0 Z" />
+        <path class="hill-front" d="M0 170 C 300 120 520 200 860 160 S 1260 130 1440 165 V220 H0 Z" />
+      </svg>
+    </div>
+    <main class="focus">
+      <header class="top">
+        <span id="companion" class="companion"></span>
+        <div class="top-actions">
+          <button id="fullscreen" class="icon-btn" title="Full screen (F11)" aria-label="Full screen">
+            <svg viewBox="0 0 16 16"><path d="M2 6V2h4M10 2h4v4M14 10v4h-4M6 14H2v-4" /></svg>
+          </button>
+          <button id="close" class="icon-btn" title="Close" aria-label="Close">
+            <svg viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8" /></svg>
+          </button>
+        </div>
+      </header>
+      <section id="stage" class="stage"></section>
+      <footer class="dock">
+        <div id="sounds" class="sounds" role="group" aria-label="Ambient sound"></div>
+        <input id="volume" type="range" min="0" max="1" step="0.05" aria-label="Volume" />
+        <div class="recharge">
+          <button data-mode="breathe">Breathe · 2 min</button>
+          <button data-mode="stretch">Stretch · 3 min</button>
+        </div>
+      </footer>
+    </main>
+    <script type="module" src="/src/focus.ts"></script>
+  </body>
+</html>

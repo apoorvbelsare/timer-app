@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "What the widget, planner and overlay pages may do",
-  "windows": ["widget", "planner", "overlay"],
+  "windows": ["widget", "planner", "overlay", "focus"],
   "permissions": [
     "core:default",
     "core:window:allow-show",
@@ -13,6 +13,7 @@
     "core:window:allow-set-size",
     "core:window:allow-set-position",
     "core:window:allow-start-dragging",
+    "core:window:allow-set-fullscreen",
     "notification:default",
     "autostart:allow-enable",
     "autostart:allow-disable",

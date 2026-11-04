@@ -1,5 +1,9 @@
+import '@fontsource-variable/fraunces';
+import '@fontsource-variable/nunito';
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as autostartEnabled } from '@tauri-apps/plugin-autostart';
-import { ensureDay, logBlock, restoreToday, skipToday, startBlock } from './actions';
+import { emit } from '@tauri-apps/api/event';
+import { Window } from '@tauri-apps/api/window';
+import { addTodo, ensureDay, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, toggleTodo } from './actions';
 import { chime, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
 import { type Planned, dayRecord, planFor, planOverlap, routineOverlap, snapshot } from './engine';
@@ -36,7 +40,7 @@ function go(next: View) {
 }
 
 function render() {
-  document.querySelectorAll<HTMLButtonElement>('.nav button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll<HTMLButtonElement>('.nav button[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   const scroll = viewEl.querySelector('.timeline-scroll')?.scrollTop;
   viewEl.replaceChildren(view === 'today' ? renderToday() : view === 'routine' ? renderRoutine() : renderSettings());
   const timeline = viewEl.querySelector('.timeline-scroll');
@@ -181,6 +185,51 @@ function renderTodayHint(count: number) {
   );
 }
 
+/** The session ritual for one block: intention and to-dos before, a note after. */
+function ritualGroup(p: Planned, key: string, ended: boolean) {
+  const rec = dayRecord(getState(), key);
+  const intention = rec.intentions[p.id];
+  return h(
+    'div',
+    { class: 'group' },
+    h('h3', {}, 'Intention'),
+    h('input', {
+      value: intention?.text ?? '',
+      placeholder: 'What do you want to get done?',
+      onChange: (e: Event) => setIntention(key, p.id, (e.target as HTMLInputElement).value),
+    }),
+    intention?.todos.length
+      ? h(
+          'ul',
+          { class: 'todo-list' },
+          intention.todos.map((t) =>
+            h(
+              'li',
+              {},
+              h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: t.done, onChange: () => toggleTodo(key, p.id, t.id) }), h('span', { class: t.done ? 'struck' : '' }, t.text)),
+              h('button', { class: 'icon', title: 'Remove', onClick: () => removeTodo(key, p.id, t.id) }, '×'),
+            ),
+          ),
+        )
+      : null,
+    h('input', {
+      placeholder: '+ Add a to-do and press Enter',
+      onKeydown: (e: KeyboardEvent) => e.key === 'Enter' && addTodo(key, p.id, (e.target as HTMLInputElement).value),
+    }),
+    ended &&
+      h(
+        'div',
+        { class: 'field' },
+        h('span', {}, 'Note'),
+        h('input', {
+          value: rec.notes[p.id] ?? '',
+          placeholder: 'A line on how it went',
+          onChange: (e: Event) => setNote(key, p.id, (e.target as HTMLInputElement).value),
+        }),
+      ),
+  );
+}
+
 function renderTodayDetail(p: Planned, key: string, now: number) {
   const status = dayRecord(getState(), key).log[p.id];
   const ended = p.endMs <= now;
@@ -228,6 +277,7 @@ function renderTodayDetail(p: Planned, key: string, now: number) {
                 ),
               )
             : null,
+          ritualGroup(p, key, ended),
           h(
             'div',
             { class: 'group' },
@@ -558,6 +608,12 @@ function renderSettings(): HTMLElement {
       h(
         'div',
         { class: 'setting' },
+        h('div', {}, h('h3', {}, 'Ask for an intention'), h('p', { class: 'sub' }, 'When a block starts, the widget asks what you want to get done. You can always say “not now”.')),
+        h('input', { type: 'checkbox', checked: settings.askIntention, onChange: (e: Event) => update((d) => void (d.settings.askIntention = (e.target as HTMLInputElement).checked)) }),
+      ),
+      h(
+        'div',
+        { class: 'setting' },
         h('div', {}, h('h3', {}, 'Start with Windows'), h('p', { class: 'sub' }, inTauri ? 'Open the widget when you sign in.' : 'Available in the desktop app.')),
         autostart,
       ),
@@ -582,7 +638,14 @@ async function main() {
   await initStore();
   unlockAudioOnClick();
   view = getState().routine.length ? 'today' : 'routine';
-  document.querySelectorAll<HTMLButtonElement>('.nav button').forEach((b) => b.addEventListener('click', () => go(b.dataset.view as View)));
+  document.querySelectorAll<HTMLButtonElement>('.nav button[data-view]').forEach((b) => b.addEventListener('click', () => go(b.dataset.view as View)));
+  document.getElementById('open-focus')!.addEventListener('click', async () => {
+    if (!inTauri) return void window.open('/focus.html', 'focus');
+    const focus = await Window.getByLabel('focus');
+    await focus?.show();
+    await focus?.setFocus();
+    await emit('focus-mode', 'focus');
+  });
   subscribe(() => render());
   render();
 

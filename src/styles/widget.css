@@ -1,18 +1,15 @@
-/* The widget floats over whatever is on screen, so it keeps one calm dark look. */
-:root {
-  --bg: rgba(24, 26, 35, 0.94);
-  --text: #eceef5;
-  --muted: #8d91a6;
-  --track: rgba(255, 255, 255, 0.08);
-  --amber: #f0aa48;
-  --coral: #ee6f61;
-  --accent: #7c9cff;
-  color-scheme: dark;
-  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-}
+@import './theme.css';
 
-* {
-  box-sizing: border-box;
+/* The widget floats over whatever is on screen: a small piece of dusk-forest calm. */
+:root {
+  --bg: rgba(31, 59, 51, 0.95);
+  --text: var(--cream);
+  --muted: rgba(246, 241, 231, 0.6);
+  --line: rgba(246, 241, 231, 0.12);
+  --track: rgba(246, 241, 231, 0.1);
+  --ring-idle: var(--sage);
+  color-scheme: dark;
+  font-family: var(--font-body);
 }
 
 html,
@@ -25,11 +22,13 @@ body {
 
 .widget {
   margin: 4px;
-  padding: 12px 14px 10px;
-  border-radius: 20px;
-  background: var(--bg);
+  padding: 12px 14px 11px;
+  border-radius: 22px;
+  background:
+    radial-gradient(120% 140% at 100% 0%, rgba(157, 184, 160, 0.16), transparent 55%),
+    var(--bg);
   color: var(--text);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  border: 1px solid var(--line);
   cursor: grab;
 }
 
@@ -54,7 +53,7 @@ body {
 .track,
 .arc {
   fill: none;
-  stroke-width: 9;
+  stroke-width: 8;
 }
 .track {
   stroke: var(--track);
@@ -86,14 +85,16 @@ body {
   line-height: 1;
 }
 #ring-value {
-  font-size: 24px;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 25px;
+  font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
 #ring-unit {
-  margin-top: 3px;
-  font-size: 10px;
-  letter-spacing: 0.06em;
+  margin-top: 4px;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
 }
@@ -107,16 +108,18 @@ body {
   gap: 3px;
 }
 .title {
-  font-size: 16px;
-  font-weight: 650;
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  padding-right: 22px;
+  padding-right: 48px;
 }
 .step {
   font-size: 12.5px;
-  color: var(--accent);
+  font-weight: 600;
+  color: var(--sage);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -133,10 +136,19 @@ body {
   text-overflow: ellipsis;
 }
 
-.icon-btn {
+.corner {
   position: absolute;
   top: -4px;
   right: -6px;
+  display: flex;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.widget:hover .corner,
+.corner:focus-within {
+  opacity: 1;
+}
+.icon-btn {
   width: 26px;
   height: 26px;
   display: grid;
@@ -146,14 +158,9 @@ body {
   background: transparent;
   color: var(--muted);
   cursor: pointer;
-  opacity: 0;
-  transition: opacity 0.2s;
-}
-.widget:hover .icon-btn {
-  opacity: 1;
 }
 .icon-btn:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(246, 241, 231, 0.09);
   color: var(--text);
 }
 .icon-btn svg {
@@ -192,19 +199,69 @@ body {
   height: 11px;
   margin-left: -1px;
   border-radius: 1px;
-  background: var(--text);
+  background: var(--cream);
+}
+
+/* ── Recharge chips ── */
+.extras {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.extras[hidden] {
+  display: none;
+}
+.chip {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  cursor: pointer;
+}
+.chip:hover {
+  background: rgba(246, 241, 231, 0.09);
 }
 
 /* ── Prompt card ── */
 .prompt {
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--line);
   cursor: default;
 }
 .prompt p {
-  margin: 0 0 9px;
+  margin: 0 0 8px;
   font-size: 13px;
+}
+.prompt input {
+  width: 100%;
+  margin-bottom: 8px;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(16, 34, 29, 0.5);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+}
+.prompt input::placeholder {
+  color: var(--muted);
+}
+.prompt input:focus {
+  outline: none;
+  border-color: var(--sage);
 }
 .actions {
   display: flex;
@@ -213,24 +270,29 @@ body {
 .actions button {
   flex: 1;
   padding: 7px 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(246, 241, 231, 0.05);
   color: var(--text);
   font: inherit;
   font-size: 12.5px;
+  font-weight: 600;
   cursor: pointer;
 }
 .actions button:hover {
-  background: rgba(255, 255, 255, 0.11);
+  background: rgba(246, 241, 231, 0.12);
 }
 .actions button.primary {
-  background: var(--accent);
+  background: var(--cream);
   border-color: transparent;
-  color: #111425;
-  font-weight: 600;
+  color: var(--forest-deep);
 }
 .actions button.quiet {
-  flex: 0 0 38px;
+  flex: 0 0 auto;
+  padding: 7px 10px;
   color: var(--muted);
+}
+button:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 1px;
 }

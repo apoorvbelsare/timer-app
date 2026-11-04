@@ -1,0 +1,406 @@
+@import './theme.css';
+
+/* Focus mode is always "dusk in the forest": deep greens, cream text, birds overhead. */
+body {
+  --text: var(--cream);
+  --muted: rgba(246, 241, 231, 0.62);
+  --line: rgba(246, 241, 231, 0.14);
+  --track: rgba(246, 241, 231, 0.1);
+  --ring-idle: var(--sage);
+  --bird: rgba(246, 241, 231, 0.55);
+  margin: 0;
+  height: 100vh;
+  overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 0%, #3a6a5b 0%, var(--forest-deep) 55%, var(--pine) 100%);
+  color: var(--text);
+  font-family: var(--font-body);
+  color-scheme: dark;
+}
+
+#sky {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.hills {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 26vh;
+  pointer-events: none;
+}
+.hills svg {
+  width: 100%;
+  height: 100%;
+}
+.hill-back {
+  fill: rgba(23, 48, 41, 0.55);
+}
+.hill-front {
+  fill: rgba(16, 34, 29, 0.85);
+}
+
+.focus {
+  position: relative;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  padding: 18px 24px 20px;
+}
+
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.companion {
+  font-size: 13px;
+  color: var(--muted);
+  letter-spacing: 0.02em;
+}
+.top-actions {
+  display: flex;
+  gap: 4px;
+}
+.icon-btn {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-btn:hover {
+  background: rgba(246, 241, 231, 0.08);
+  color: var(--text);
+}
+.icon-btn svg {
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* ── Stage ── */
+.stage {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  overflow-y: auto;
+}
+.focus-stage,
+.recharge-stage {
+  width: min(520px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+}
+.focus-stage.arriving,
+.recharge-stage {
+  animation: settle 0.5s ease-out;
+}
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+.eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--sage);
+}
+h1 {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: clamp(30px, 5vw, 44px);
+  letter-spacing: -0.01em;
+}
+h2 {
+  margin: 8px 0 0;
+  font-family: var(--font-display);
+  font-weight: 500;
+  font-size: 26px;
+}
+p {
+  margin: 0;
+  line-height: 1.55;
+}
+.soft {
+  color: var(--muted);
+}
+.until {
+  color: var(--muted);
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.big-ring {
+  position: relative;
+  width: min(240px, 32vh);
+  aspect-ratio: 1;
+  margin: 14px 0 6px;
+}
+.big-ring svg {
+  width: 100%;
+  height: 100%;
+}
+.track,
+.arc {
+  fill: none;
+  stroke-width: 6;
+}
+.track {
+  stroke: var(--track);
+}
+.arc {
+  stroke-linecap: round;
+  transition:
+    stroke-dasharray 0.9s linear,
+    stroke 0.6s ease;
+}
+.ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.ring-value {
+  font-family: var(--font-display);
+  font-size: clamp(40px, 8vh, 60px);
+  font-weight: 450;
+  font-variant-numeric: tabular-nums;
+}
+.ring-unit {
+  margin-top: 6px;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Intention ── */
+.intention {
+  width: 100%;
+  margin-top: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+input {
+  font: inherit;
+  color: var(--text);
+}
+.intention-text {
+  width: 100%;
+  padding: 10px 4px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  font-family: var(--font-display);
+  font-size: 19px;
+  text-align: center;
+}
+.intention-text::placeholder,
+.todo-add::placeholder {
+  color: var(--muted);
+}
+.intention-text:focus,
+.todo-add:focus {
+  outline: none;
+  border-color: var(--sage);
+}
+.todos {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+  text-align: left;
+}
+.todos li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 4px;
+  border-radius: 10px;
+}
+.todos li:hover {
+  background: rgba(246, 241, 231, 0.05);
+}
+.todos label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+.todos li.done span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.todos input[type='checkbox'] {
+  width: 17px;
+  height: 17px;
+  accent-color: var(--sage);
+}
+.remove {
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font-size: 17px;
+  cursor: pointer;
+  opacity: 0;
+}
+.todos li:hover .remove {
+  opacity: 1;
+}
+.todo-add {
+  padding: 8px 4px;
+  border: 0;
+  border-bottom: 1px dashed var(--line);
+  background: transparent;
+  font-size: 14px;
+}
+
+/* ── Recharge ── */
+.breath-wrap {
+  width: 220px;
+  height: 220px;
+  display: grid;
+  place-items: center;
+  margin: 18px 0;
+}
+.breath {
+  width: 90px;
+  height: 90px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, rgba(246, 241, 231, 0.5), rgba(157, 184, 160, 0.35) 60%, rgba(157, 184, 160, 0.1));
+  box-shadow: 0 0 60px rgba(157, 184, 160, 0.35);
+  transition-property: transform;
+  transition-timing-function: ease-in-out;
+}
+.breath.full {
+  transform: scale(2.3);
+}
+.breath-label {
+  font-family: var(--font-display);
+  font-size: 22px;
+}
+.bar {
+  width: 100%;
+  height: 4px;
+  margin: 16px 0 8px;
+  border-radius: 2px;
+  background: var(--track);
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--sage);
+  transition: width 0.2s linear;
+}
+.row {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.btn {
+  margin-top: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(246, 241, 231, 0.06);
+  color: var(--text);
+  font: inherit;
+  font-weight: 650;
+  cursor: pointer;
+}
+.btn:hover {
+  background: rgba(246, 241, 231, 0.12);
+}
+.btn.primary {
+  background: var(--cream);
+  border-color: transparent;
+  color: var(--forest-deep);
+}
+.btn.ghost {
+  background: transparent;
+}
+
+/* ── Dock ── */
+.dock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin: 0 auto;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(16, 34, 29, 0.55);
+  backdrop-filter: blur(8px);
+}
+.sounds,
+.recharge {
+  display: flex;
+  gap: 4px;
+}
+.dock button {
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.dock button:hover {
+  color: var(--text);
+  background: rgba(246, 241, 231, 0.07);
+}
+.sounds button.on {
+  background: var(--cream);
+  color: var(--forest-deep);
+}
+.recharge {
+  padding-left: 14px;
+  border-left: 1px solid var(--line);
+}
+#volume {
+  width: 90px;
+  accent-color: var(--sage);
+}
+button:focus-visible,
+input:focus-visible {
+  outline: 2px solid var(--sage);
+  outline-offset: 2px;
+}
+
+@media (max-width: 700px) {
+  .recharge {
+    border-left: 0;
+    padding-left: 0;
+  }
+}

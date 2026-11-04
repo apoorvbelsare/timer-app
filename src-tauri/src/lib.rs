@@ -3,7 +3,7 @@ use std::{fs, path::PathBuf};
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, WindowEvent,
+    AppHandle, Emitter, Manager, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -31,12 +31,22 @@ fn save_state(app: AppHandle, json: String) -> Result<(), String> {
     fs::rename(&tmp, &path).map_err(|e| e.to_string())
 }
 
-fn show_planner(app: &AppHandle) {
-    if let Some(window) = app.get_webview_window("planner") {
+fn show_window(app: &AppHandle, label: &str) {
+    if let Some(window) = app.get_webview_window(label) {
         let _ = window.show();
         let _ = window.unminimize();
         let _ = window.set_focus();
     }
+}
+
+fn show_planner(app: &AppHandle) {
+    show_window(app, "planner");
+}
+
+/// The focus page listens for this to pick its mode and resume ambient sound.
+fn show_focus(app: &AppHandle) {
+    show_window(app, "focus");
+    let _ = app.emit_to("focus", "focus-mode", "focus");
 }
 
 fn toggle_widget(app: &AppHandle) {
@@ -61,6 +71,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![load_state, save_state])
         .setup(|app| {
             let planner = MenuItem::with_id(app, "planner", "Open planner", true, None::<&str>)?;
+            let focus = MenuItem::with_id(app, "focus", "Focus mode", true, None::<&str>)?;
             let widget = MenuItem::with_id(app, "widget", "Show / hide widget", true, None::<&str>)?;
             let lock = CheckMenuItem::with_id(
                 app,
@@ -72,7 +83,7 @@ pub fn run() {
             )?;
             let separator = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&planner, &widget, &lock, &separator, &quit])?;
+            let menu = Menu::with_items(app, &[&planner, &focus, &widget, &lock, &separator, &quit])?;
 
             let lock_item = lock.clone();
             TrayIconBuilder::with_id("main")
@@ -82,6 +93,7 @@ pub fn run() {
                 .show_menu_on_left_click(false)
                 .on_menu_event(move |app, event| match event.id().as_ref() {
                     "planner" => show_planner(app),
+                    "focus" => show_focus(app),
                     "widget" => toggle_widget(app),
                     "lock" => {
                         let locked = lock_item.is_checked().unwrap_or(false);
