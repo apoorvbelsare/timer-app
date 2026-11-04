@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Timer</title>
+  </head>
+  <body>
+    <div id="app" class="widget">
+      <div class="main">
+        <div class="ring">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="track" cx="50" cy="50" r="42" />
+            <circle id="arc" class="arc" cx="50" cy="50" r="42" transform="rotate(-90 50 50)" />
+          </svg>
+          <div class="ring-label">
+            <span id="ring-value"></span>
+            <span id="ring-unit"></span>
+          </div>
+        </div>
+        <div class="info">
+          <div id="title" class="title"></div>
+          <div id="step" class="step"></div>
+          <div id="until" class="until"></div>
+          <div id="next" class="next"></div>
+        </div>
+        <button id="open-planner" class="icon-btn" title="Open planner" aria-label="Open planner">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4h12M2 8h12M2 12h8" /></svg>
+        </button>
+      </div>
+      <div id="strip" class="strip"></div>
+      <div id="prompt" class="prompt" hidden></div>
+    </div>
+    <script type="module" src="/src/widget.ts"></script>
+  </body>
+</html>

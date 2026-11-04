@@ -1,0 +1,21 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "What the widget, planner and overlay pages may do",
+  "windows": ["widget", "planner", "overlay"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-show",
+    "core:window:allow-hide",
+    "core:window:allow-set-focus",
+    "core:window:allow-unminimize",
+    "core:window:allow-maximize",
+    "core:window:allow-set-size",
+    "core:window:allow-set-position",
+    "core:window:allow-start-dragging",
+    "notification:default",
+    "autostart:allow-enable",
+    "autostart:allow-disable",
+    "autostart:allow-is-enabled"
+  ]
+}

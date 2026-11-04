@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Timer · Planner</title>
+  </head>
+  <body>
+    <div class="shell">
+      <nav class="nav">
+        <div class="brand">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" /><path d="M12 3a9 9 0 0 1 9 9" /></svg>
+          Timer
+        </div>
+        <button data-view="today">Today</button>
+        <button data-view="routine">Routine</button>
+        <button data-view="settings">Settings</button>
+      </nav>
+      <main id="view"></main>
+    </div>
+    <script type="module" src="/src/planner.ts"></script>
+  </body>
+</html>

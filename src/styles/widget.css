@@ -1,0 +1,236 @@
+/* The widget floats over whatever is on screen, so it keeps one calm dark look. */
+:root {
+  --bg: rgba(24, 26, 35, 0.94);
+  --text: #eceef5;
+  --muted: #8d91a6;
+  --track: rgba(255, 255, 255, 0.08);
+  --amber: #f0aa48;
+  --coral: #ee6f61;
+  --accent: #7c9cff;
+  color-scheme: dark;
+  font-family: 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  user-select: none;
+}
+
+.widget {
+  margin: 4px;
+  padding: 12px 14px 10px;
+  border-radius: 20px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  cursor: grab;
+}
+
+.main {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  position: relative;
+}
+
+/* ── Ring ── */
+.ring {
+  position: relative;
+  width: 84px;
+  height: 84px;
+  flex: none;
+}
+.ring svg {
+  width: 100%;
+  height: 100%;
+}
+.track,
+.arc {
+  fill: none;
+  stroke-width: 9;
+}
+.track {
+  stroke: var(--track);
+}
+.arc {
+  stroke-linecap: round;
+  transition:
+    stroke-dasharray 0.9s linear,
+    stroke 0.6s ease;
+}
+.waiting .arc {
+  opacity: 0.4;
+}
+.closing .arc {
+  animation: breathe 2s ease-in-out infinite;
+}
+@keyframes breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+.ring-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+#ring-value {
+  font-size: 24px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+#ring-unit {
+  margin-top: 3px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ── Text ── */
+.info {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.title {
+  font-size: 16px;
+  font-weight: 650;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding-right: 22px;
+}
+.step {
+  font-size: 12.5px;
+  color: var(--accent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.until {
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+.next {
+  font-size: 12px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.icon-btn {
+  position: absolute;
+  top: -4px;
+  right: -6px;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.widget:hover .icon-btn {
+  opacity: 1;
+}
+.icon-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text);
+}
+.icon-btn svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+/* ── Day strip ── */
+.strip {
+  position: relative;
+  height: 5px;
+  margin-top: 10px;
+  border-radius: 3px;
+  background: var(--track);
+}
+.strip:empty {
+  display: none;
+}
+.seg {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-radius: 3px;
+}
+.seg.past {
+  opacity: 0.3;
+}
+.now {
+  position: absolute;
+  top: -3px;
+  width: 2px;
+  height: 11px;
+  margin-left: -1px;
+  border-radius: 1px;
+  background: var(--text);
+}
+
+/* ── Prompt card ── */
+.prompt {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: default;
+}
+.prompt p {
+  margin: 0 0 9px;
+  font-size: 13px;
+}
+.actions {
+  display: flex;
+  gap: 6px;
+}
+.actions button {
+  flex: 1;
+  padding: 7px 0;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.actions button:hover {
+  background: rgba(255, 255, 255, 0.11);
+}
+.actions button.primary {
+  background: var(--accent);
+  border-color: transparent;
+  color: #111425;
+  font-weight: 600;
+}
+.actions button.quiet {
+  flex: 0 0 38px;
+  color: var(--muted);
+}

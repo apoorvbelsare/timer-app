@@ -1,0 +1,293 @@
+import { enable as enableAutostart } from '@tauri-apps/plugin-autostart';
+import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
+import { Window, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
+import { logBlock, skipToday, snooze, startBlock } from './actions';
+import { chime, notify, unlockAudioOnClick } from './alerts';
+import { h } from './dom';
+import { type Snapshot, dayRecord, escalation, snapshot } from './engine';
+import { formatDuration, minuteOfDay } from './model';
+import { getState, inTauri, initStore, subscribe, update, wasFirstRun } from './store';
+import './styles/widget.css';
+
+const COMPACT = { w: 320, h: 128 };
+const EXPANDED = { w: 320, h: 222 };
+const CIRCUMFERENCE = 2 * Math.PI * 42;
+
+const $ = (id: string) => document.getElementById(id)!;
+const app = $('app');
+const arc = $('arc') as unknown as SVGCircleElement;
+const promptEl = $('prompt');
+
+const win = inTauri ? getCurrentWindow() : null;
+
+async function openPlanner() {
+  if (!inTauri) {
+    window.open('/planner.html', 'planner');
+    return;
+  }
+  const planner = await Window.getByLabel('planner');
+  await planner?.show();
+  await planner?.unminimize();
+  await planner?.setFocus();
+}
+
+// ── Rendering ────────────────────────────────────────────────────────────────
+
+function ringText(ms: number): [string, string] {
+  if (ms < 60_000) return [String(Math.max(0, Math.ceil(ms / 1000))), 'sec'];
+  const minutes = Math.ceil(ms / 60_000);
+  if (minutes < 60) return [String(minutes), 'min'];
+  return [`${Math.floor(minutes / 60)}h${String(minutes % 60).padStart(2, '0')}`, 'left'];
+}
+
+/** The ring warms up as the end gets close: block colour, then amber, then coral. */
+function ringColor(s: Snapshot): string {
+  if (!s.current) return 'var(--muted)';
+  if (s.remainingMs <= 60_000) return 'var(--coral)';
+  if (s.remainingMs <= 5 * 60_000) return 'var(--amber)';
+  return s.current.color;
+}
+
+function render(s: Snapshot) {
+  const { routine } = getState();
+  const remaining = s.current || s.next ? 1 - s.progress : 0;
+  arc.style.strokeDasharray = `${CIRCUMFERENCE * remaining} ${CIRCUMFERENCE}`;
+  arc.style.stroke = ringColor(s);
+  app.classList.toggle('waiting', s.awaitingStart);
+  app.classList.toggle('closing', !!s.current && s.remainingMs <= 60_000);
+
+  const [value, unit] = s.current || s.next ? ringText(s.remainingMs) : ['✓', ''];
+  $('ring-value').textContent = value;
+  $('ring-unit').textContent = unit;
+
+  const nextLine = s.next ? `Next · ${s.next.name} ${s.next.start}` : '';
+  if (routine.length === 0) {
+    setText('No routine yet', '', 'Open the planner to build your day', '');
+    $('ring-value').textContent = '+';
+  } else if (s.current && s.awaitingStart) {
+    setText(s.current.name, 'Optional · start when you’re ready', `until ${s.current.end}`, nextLine);
+  } else if (s.current) {
+    const step = s.step
+      ? `${s.step.step.name} · ${formatDuration(s.step.remainingMs)} (${s.step.index + 1}/${s.current.steps.length})`
+      : '';
+    setText(s.current.name, step, `${formatDuration(s.remainingMs)} left · until ${s.current.end}`, nextLine);
+  } else if (s.next) {
+    setText('Free time', '', `until ${s.next.start}`, nextLine);
+  } else {
+    setText('Done for today', '', 'Nothing else planned', '');
+  }
+
+  renderStrip(s);
+  renderPrompt(s);
+}
+
+function setText(title: string, step: string, until: string, next: string) {
+  $('title').textContent = title;
+  $('step').textContent = step;
+  $('step').hidden = !step;
+  $('until').textContent = until;
+  $('next').textContent = next;
+}
+
+/** A thin bar of the whole day, so "now" always has a place among the rest. */
+function renderStrip(s: Snapshot) {
+  const strip = $('strip');
+  if (s.plan.length === 0) {
+    strip.replaceChildren();
+    return;
+  }
+  const nowMin = minuteOfDay(s.now);
+  const first = Math.min(nowMin, ...s.plan.map((p) => minuteOfDay(p.startMs)));
+  const last = Math.max(nowMin, ...s.plan.map((p) => minuteOfDay(p.endMs) || 24 * 60));
+  const from = Math.floor(first / 60) * 60;
+  const span = Math.max(60, Math.ceil(last / 60) * 60 - from);
+  const pct = (min: number) => `${((min - from) / span) * 100}%`;
+
+  strip.replaceChildren(
+    ...s.plan.map((p) => {
+      const start = minuteOfDay(p.startMs);
+      const width = (p.endMs - p.startMs) / 60_000;
+      return h('div', {
+        class: `seg${p.endMs <= s.now ? ' past' : ''}`,
+        style: `left:${pct(start)};width:${(width / span) * 100}%;background:${p.color}`,
+        title: `${p.name} ${p.start}–${p.end}`,
+      });
+    }),
+    h('div', { class: 'now', style: `left:${pct(nowMin)}` }),
+  );
+}
+
+let promptKey = '';
+
+function renderPrompt(s: Snapshot) {
+  const p = s.prompt;
+  const key = p ? `${s.key}:${p.kind}:${p.block.id}` : '';
+  if (key === promptKey) return;
+  promptKey = key;
+  promptEl.hidden = !p;
+  void resize(p ? EXPANDED : COMPACT);
+  if (!p) return promptEl.replaceChildren();
+
+  if (p.kind === 'start') {
+    promptEl.replaceChildren(
+      h('p', {}, h('strong', {}, p.block.name), ' is on now. Start it?'),
+      h(
+        'div',
+        { class: 'actions' },
+        h('button', { class: 'primary', onClick: () => startBlock(s.key, p.block.id) }, 'Start'),
+        h('button', { onClick: () => skipToday(s.key, p.block.id) }, 'Skip today'),
+      ),
+    );
+  } else {
+    promptEl.replaceChildren(
+      h('p', {}, h('strong', {}, p.block.name), ' ended. How did it go?'),
+      h(
+        'div',
+        { class: 'actions' },
+        h('button', { class: 'primary', onClick: () => logBlock(s.key, p.block.id, 'done') }, 'Done'),
+        h('button', { onClick: () => logBlock(s.key, p.block.id, 'partly') }, 'Partly'),
+        h('button', { onClick: () => logBlock(s.key, p.block.id, 'skipped') }, 'Skipped'),
+        h('button', { class: 'quiet', title: 'Hold reminders for 10 minutes', onClick: () => snooze(s.key, p.block.id) }, '+10'),
+      ),
+    );
+  }
+}
+
+let size = COMPACT;
+async function resize(next: typeof COMPACT) {
+  if (next === size) return;
+  size = next;
+  await win?.setSize(new LogicalSize(next.w, next.h));
+}
+
+// ── Alerts ───────────────────────────────────────────────────────────────────
+
+const fired = new Set<string>();
+let booted = false;
+let lastCurrent = '';
+let lastStep = '';
+let overlayShownFor = '';
+
+function alerts(s: Snapshot) {
+  const state = getState();
+  const { settings } = state;
+  const sound = () => settings.chime && chime();
+  const thresholds = [...settings.warnMinutes].sort((a, b) => a - b);
+
+  // Heads-up before the current block ends, or before the next one starts during free time
+  const target = s.current && !s.awaitingStart ? s.current : !s.current ? s.next : null;
+  if (target) {
+    const crossed = thresholds.filter((t) => s.remainingMs <= t * 60_000);
+    const keyFor = (t: number) => `${s.key}:${target.id}:${s.current ? 'end' : 'start'}:${t}`;
+    if (crossed.length && !fired.has(keyFor(crossed[0]))) {
+      crossed.forEach((t) => fired.add(keyFor(t)));
+      const left = formatDuration(s.remainingMs);
+      if (s.current) {
+        notify(`${target.name} ends in ${left}`, s.next ? `Next: ${s.next.name} at ${s.next.start}` : 'Nothing after this today');
+      } else {
+        notify(`${target.name} starts in ${left}`, `At ${target.start}. Time to wrap up what you’re doing.`);
+      }
+      sound();
+    }
+  }
+
+  // A block begins, or a step inside it changes. Skipped on launch, mid-block.
+  const currentKey = s.current ? `${s.key}:${s.current.id}` : '';
+  if (booted && currentKey && currentKey !== lastCurrent && !s.awaitingStart) {
+    notify(`Now: ${s.current!.name}`, `Until ${s.current!.end}`);
+    sound();
+  }
+  lastCurrent = currentKey;
+
+  const stepKey = s.step ? `${currentKey}:${s.step.index}` : '';
+  if (booted && stepKey && stepKey !== lastStep && s.step!.index > 0 && settings.chime) chime('step');
+  lastStep = stepKey;
+
+  // The hyperfocus guard: card → toast → overlay
+  const p = s.prompt;
+  if (p) {
+    const rec = dayRecord(state, s.key);
+    const level = escalation(p, rec, settings, s.now);
+    const promptId = `${s.key}:${p.kind}:${p.block.id}:${rec.snoozedUntil[p.block.id] ?? ''}`;
+    if (level !== 'none' && !fired.has(`${promptId}:notify`)) {
+      fired.add(`${promptId}:notify`);
+      if (p.kind === 'start') notify(`${p.block.name} is on now`, 'Start it or skip it. Either is fine.');
+      else notify('Time to switch', `${p.block.name} ended ${formatDuration(s.now - p.block.endMs)} ago.`);
+    }
+    if (level === 'overlay' && overlayShownFor !== promptId) {
+      overlayShownFor = promptId;
+      void showOverlay();
+    }
+  }
+  booted = true;
+}
+
+async function showOverlay() {
+  if (!inTauri) return console.info('[overlay] would show now');
+  const overlay = await Window.getByLabel('overlay');
+  await overlay?.show();
+  await overlay?.maximize();
+  await overlay?.setFocus();
+}
+
+// ── Window placement ─────────────────────────────────────────────────────────
+
+async function placeWidget() {
+  if (!win) return;
+  const saved = getState().settings.widgetPos;
+  if (saved) return win.setPosition(new PhysicalPosition(saved.x, saved.y));
+  // Bottom-right, with room above the taskbar for the expanded card
+  const monitor = await currentMonitor();
+  if (!monitor) return;
+  const scale = monitor.scaleFactor;
+  const x = monitor.position.x + monitor.size.width - Math.round((COMPACT.w + 24) * scale);
+  const y = monitor.position.y + monitor.size.height - Math.round((EXPANDED.h + 72) * scale);
+  await win.setPosition(new PhysicalPosition(x, y));
+}
+
+function rememberPosition() {
+  let timer: number | undefined;
+  void win?.onMoved(({ payload }) => {
+    clearTimeout(timer);
+    timer = window.setTimeout(() => update((d) => (d.settings.widgetPos = { x: payload.x, y: payload.y })), 600);
+  });
+}
+
+// ── Start up ─────────────────────────────────────────────────────────────────
+
+function tick() {
+  const s = snapshot(getState(), Date.now());
+  render(s);
+  alerts(s);
+}
+
+async function main() {
+  await initStore();
+  await placeWidget();
+  rememberPosition();
+  unlockAudioOnClick();
+
+  app.addEventListener('mousedown', (e) => {
+    if (e.button === 0 && !(e.target as HTMLElement).closest('button')) void win?.startDragging();
+  });
+  app.addEventListener('dblclick', () => void openPlanner());
+  $('open-planner').addEventListener('click', () => void openPlanner());
+
+  subscribe((state) => {
+    promptKey = ''; // the answer may have changed what the card should offer
+    if (state.settings.widgetPos === null) void placeWidget();
+    tick();
+  });
+
+  if (wasFirstRun()) {
+    // Registering the dev build with Windows startup would point at a throwaway exe
+    if (inTauri && import.meta.env.PROD) await enableAutostart().catch(() => {});
+    await update(() => {}); // write the first state file
+    void openPlanner();
+  }
+
+  tick();
+  setInterval(tick, 1000);
+}
+
+void main();

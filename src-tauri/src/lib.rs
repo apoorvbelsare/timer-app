@@ -1,0 +1,117 @@
+use std::{fs, path::PathBuf};
+
+use tauri::{
+    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    AppHandle, Manager, WindowEvent,
+};
+use tauri_plugin_autostart::MacosLauncher;
+
+fn state_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("state.json"))
+}
+
+#[tauri::command]
+fn load_state(app: AppHandle) -> Result<Option<String>, String> {
+    let path = state_path(&app)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    fs::read_to_string(path).map(Some).map_err(|e| e.to_string())
+}
+
+/// Writes to a temp file first so a crash mid-write never leaves a half-written routine.
+#[tauri::command]
+fn save_state(app: AppHandle, json: String) -> Result<(), String> {
+    let path = state_path(&app)?;
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, json).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+fn show_planner(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("planner") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+    }
+}
+
+fn toggle_widget(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("widget") {
+        if window.is_visible().unwrap_or(false) {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+        }
+    }
+}
+
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    tauri::Builder::default()
+        // A second launch (e.g. from the Start menu) just brings the planner forward
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            show_planner(app)
+        }))
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
+        .invoke_handler(tauri::generate_handler![load_state, save_state])
+        .setup(|app| {
+            let planner = MenuItem::with_id(app, "planner", "Open planner", true, None::<&str>)?;
+            let widget = MenuItem::with_id(app, "widget", "Show / hide widget", true, None::<&str>)?;
+            let lock = CheckMenuItem::with_id(
+                app,
+                "lock",
+                "Lock widget (click-through)",
+                true,
+                false,
+                None::<&str>,
+            )?;
+            let separator = PredefinedMenuItem::separator(app)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&planner, &widget, &lock, &separator, &quit])?;
+
+            let lock_item = lock.clone();
+            TrayIconBuilder::with_id("main")
+                .icon(app.default_window_icon().unwrap().clone())
+                .tooltip("Timer")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(move |app, event| match event.id().as_ref() {
+                    "planner" => show_planner(app),
+                    "widget" => toggle_widget(app),
+                    "lock" => {
+                        let locked = lock_item.is_checked().unwrap_or(false);
+                        if let Some(window) = app.get_webview_window("widget") {
+                            let _ = window.set_ignore_cursor_events(locked);
+                        }
+                    }
+                    "quit" => app.exit(0),
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } = event
+                    {
+                        show_planner(tray.app_handle());
+                    }
+                })
+                .build(app)?;
+            Ok(())
+        })
+        // The app lives in the tray: closing a window only hides it
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
+        })
+        .run(tauri::generate_context!())
+        .expect("error while running the timer app");
+}
