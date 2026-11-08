@@ -7,7 +7,7 @@ import { addTodo, ensureDay, logBlock, removeTodo, restoreToday, setIntention, s
 import { chime, playTune, unlockAudioOnClick } from './alerts';
 import { hourLabel, hourTune } from './hourly';
 import { h } from './dom';
-import { type Planned, dayRecord, planFor, planOverlap, routineOverlap, snapshot } from './engine';
+import { type Planned, dayRecord, lanes, planFor, snapshot } from './engine';
 import {
   type Block,
   type BlockStatus,
@@ -99,11 +99,13 @@ function renderToday(): HTMLElement {
   const plan = planFor(state, date, true);
   const live = snapshot(state, now);
   const plannedMs = plan.filter((p) => !p.skippedToday).reduce((sum, p) => sum + (p.endMs - p.startMs), 0);
+  const columns = lanes(plan);
 
   const blockEl = (p: Planned) => {
     const status = rec.log[p.id];
     const top = toMinutes(p.start) * PX_PER_MIN;
     const height = Math.max(22, (toMinutes(p.end) - toMinutes(p.start)) * PX_PER_MIN);
+    const { lane, of } = columns.get(p.id)!;
     const classes = ['tl-block'];
     if (p.skippedToday) classes.push('skipped');
     if (p.id === selectedToday) classes.push('selected');
@@ -112,7 +114,7 @@ function renderToday(): HTMLElement {
       'button',
       {
         class: classes.join(' '),
-        style: `top:${top}px;height:${height}px;--c:${p.color}`,
+        style: `top:${top}px;height:${height}px;--c:${p.color};--lane:${lane};--lanes:${of}`,
         onClick: () => {
           selectedToday = p.id;
           oneOffDraft = null;
@@ -253,11 +255,6 @@ function renderTodayDetail(p: Planned, key: string, now: number) {
 
   const moveToday = () => {
     if (toMinutes(end) <= toMinutes(start)) return fail('The end needs to be after the start.');
-    const clash = planOverlap(
-      planFor(getState(), new Date(now)),
-      { id: p.id, start, end },
-    );
-    if (clash) return fail(`That overlaps ${clash.name} (${clash.start}–${clash.end}).`);
     error = '';
     void update((d) => {
       const day = ensureDay(d, key);
@@ -343,8 +340,6 @@ function renderOneOffForm(key: string) {
   const save = () => {
     if (!draft.name.trim()) return fail('Give it a name.');
     if (toMinutes(draft.end) <= toMinutes(draft.start)) return fail('The end needs to be after the start.');
-    const clash = planOverlap(planFor(getState(), new Date()), draft);
-    if (clash) return fail(`That overlaps ${clash.name} (${clash.start}–${clash.end}).`);
     const block = { ...draft, name: draft.name.trim() };
     oneOffDraft = null;
     selectedToday = block.id;
@@ -452,8 +447,6 @@ function renderBlockEditor(draft: Block): HTMLElement {
     if (!name) return fail('Give the block a name.');
     if (draft.days.length === 0) return fail('Pick at least one day.');
     if (toMinutes(draft.end) <= toMinutes(draft.start)) return fail('The end needs to be after the start. (Blocks can’t cross midnight yet.)');
-    const clash = routineOverlap(getState().routine, draft);
-    if (clash) return fail(`That overlaps ${clash.block.name} (${clash.block.start}–${clash.block.end}) on ${DAY_NAMES[clash.day]}.`);
     const block: Block = {
       ...draft,
       name,

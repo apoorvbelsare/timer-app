@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escalation, planFor, planOverlap, routineOverlap, snapshot } from './engine';
+import { escalation, lanes, planFor, snapshot } from './engine';
 import { type AppState, type Block, defaultState, emptyDay } from './model';
 
 // Wednesday 4 November 2026
@@ -145,17 +145,31 @@ describe('escalation', () => {
   });
 });
 
-describe('overlap checks', () => {
-  it('only counts routine blocks that share a weekday', () => {
-    const routine = [block('gym', '07:00', '08:00', { days: [1, 3, 5] })];
-    expect(routineOverlap(routine, block('run', '07:30', '08:30', { days: [2, 4] }))).toBeNull();
-    expect(routineOverlap(routine, block('run', '07:30', '08:30', { days: [3] }))).toMatchObject({ day: 3 });
-    expect(routineOverlap(routine, block('next', '08:00', '09:00', { days: [3] }))).toBeNull();
+describe('overlapping blocks', () => {
+  const s = stateWith([block('deep', '09:00', '12:00'), block('call', '10:00', '10:30'), block('lunch', '12:00', '13:00')]);
+
+  it('puts the latest-started block in front and the rest underneath', () => {
+    const during = snapshot(s, at('10:15'));
+    expect(during.current?.id).toBe('call');
+    expect(during.alsoRunning.map((p) => p.id)).toEqual(['deep']);
+    expect(during.remainingMs).toBe(15 * 60_000);
   });
 
-  it('checks a moved block against the rest of the day', () => {
-    const plan = planFor(stateWith([block('a', '08:00', '09:00'), block('b', '10:00', '11:00')]), WED);
-    expect(planOverlap(plan, { id: 'b', start: '08:30', end: '09:30' })?.id).toBe('a');
-    expect(planOverlap(plan, { id: 'b', start: '09:00', end: '10:30' })).toBeNull();
+  it('hands back to the outer block once the inner one ends', () => {
+    const after = snapshot(s, at('10:45'));
+    expect(after.current?.id).toBe('deep');
+    expect(after.alsoRunning).toEqual([]);
+  });
+
+  it('lays overlapping blocks out side by side, and lone blocks full width', () => {
+    const cols = lanes(planFor(s, WED));
+    expect(cols.get('deep')).toEqual({ lane: 0, of: 2 });
+    expect(cols.get('call')).toEqual({ lane: 1, of: 2 });
+    expect(cols.get('lunch')).toEqual({ lane: 0, of: 1 });
+  });
+
+  it('reuses a column once it frees up', () => {
+    const cols = lanes(planFor(stateWith([block('a', '09:00', '12:00'), block('b', '09:00', '10:00'), block('c', '10:00', '11:00')]), WED));
+    expect(cols.get('c')).toEqual({ lane: 1, of: 2 });
   });
 });

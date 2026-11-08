@@ -443,12 +443,15 @@ input.narrow {
   font-variant-numeric: tabular-nums;
 }
 .tl-block {
+  /* Overlapping blocks share the row as columns */
+  --col: calc((100% - 64px) / var(--lanes, 1));
   position: absolute;
-  left: 64px;
-  right: 0;
+  left: calc(64px + var(--col) * var(--lane, 0));
+  width: calc(var(--col) - 4px * min(1, var(--lanes, 1) - 1));
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
-  gap: 10px;
+  gap: 0 10px;
   padding: 4px 10px;
   overflow: hidden;
   border: 0;

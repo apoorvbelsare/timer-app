@@ -6,7 +6,7 @@ Timer sits in the empty middle of your taskbar, or in a corner of your screen, a
 
 Everything stays on your PC. There's no account, no cloud and no tracking.
 
-> **`main` has the latest version of Timer (v0.4.1, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
+> **`main` has the latest version of Timer (v0.5.0, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
 
 ---
 
@@ -40,6 +40,7 @@ Many people with ADHD struggle to sense time passing (often called *time blindne
 ### Plan your routine
 - **Routine blocks:** each block has a time, days of the week, and a colour. It can also have **timed steps** that move on by themselves (shower 15 min → get dressed 10 min → breakfast 15 min).
 - **Optional blocks:** for things you don't do every day. Instead of starting on their own, they ask "Start or skip?", and skipping costs nothing.
+- **Overlapping blocks:** blocks can share the same time. The one that started most recently is shown in front, and the widget lists the others as "Also on". A 10:00 call inside a 9–12 Deep work block takes over for its half hour, then Deep work comes back. On the Today page, overlapping blocks sit side by side.
 - **Just for today:** skip, move or add a one-off block for today only. Your usual routine stays as it is.
 
 ### Stay on track
@@ -92,7 +93,7 @@ If a `Timer_x.y.z_x64-setup.exe` is attached to the [Releases](https://github.co
    ```
 
 3. Run the installer it creates:
-   `src-tauri\target\release\bundle\nsis\Timer_0.4.1_x64-setup.exe`
+   `src-tauri\target\release\bundle\nsis\Timer_0.5.0_x64-setup.exe`
 
 After installing, **Timer** is in your Start menu, and it **starts with Windows** from the first launch. You can turn that off in Settings. To uninstall: **Windows Settings → Apps → Timer**.
 
@@ -208,7 +209,7 @@ npm run tauri build   # build the Windows installer
 
 | Branch | What it is |
 | --- | --- |
-| `main` | **Use this one: the latest version (v0.4.1, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
+| `main` | **Use this one: the latest version (v0.5.0, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
 | `feat/taskbar-dock` | Where the taskbar dock was built; the same as `main` |
 | `feat/garden-parking-lot` | v0.3.0: Flown style plus the garden, parking lot and hourly ping |
 | `feat/flown-style` | The Flown-inspired version without those three additions |

@@ -71,7 +71,13 @@ function render(s: Snapshot) {
   $('ring-value').textContent = value;
   $('ring-unit').textContent = unit;
 
-  const nextLine = s.next ? `Next · ${s.next.name} ${s.next.start}` : '';
+  // A block running underneath the one in front matters more than what's next
+  const under = s.alsoRunning[0];
+  const nextLine = under
+    ? `Also on · ${s.alsoRunning.map((p) => p.name).join(', ')} until ${under.end}`
+    : s.next
+      ? `Next · ${s.next.name} ${s.next.start}`
+      : '';
   if (state.routine.length === 0 && s.plan.length === 0) {
     setText('No routine yet', '', 'Open the planner to build your day', '');
     $('ring-value').textContent = '+';

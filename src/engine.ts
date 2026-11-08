@@ -43,6 +43,8 @@ export interface Snapshot {
   key: string;
   plan: Planned[];
   current: Planned | null;
+  /** Other blocks running at the same time as `current`, which is the latest to start */
+  alsoRunning: Planned[];
   awaitingStart: boolean;
   next: Planned | null;
   /** Time left in the current block, or until the next one during free time */
@@ -106,7 +108,11 @@ export function snapshot(state: AppState, now: number): Snapshot {
   const key = dayKey(date);
   const rec = dayRecord(state, key);
   const plan = planFor(state, date);
-  const current = plan.find((p) => p.startMs <= now && now < p.endMs) ?? null;
+  // Blocks may overlap. The one that started last is the one in front: a call
+  // inside a deep-work block takes over for its length, then deep work returns.
+  const running = plan.filter((p) => p.startMs <= now && now < p.endMs);
+  const current = running[running.length - 1] ?? null;
+  const alsoRunning = running.slice(0, -1).reverse();
   const next = plan.find((p) => p.startMs > now) ?? null;
 
   let awaitingStart = false;
@@ -136,6 +142,7 @@ export function snapshot(state: AppState, now: number): Snapshot {
     key,
     plan,
     current,
+    alsoRunning,
     awaitingStart,
     next,
     remainingMs,
@@ -199,27 +206,38 @@ export function escalation(prompt: Prompt | null, rec: DayRecord, settings: Sett
   return 'none';
 }
 
-interface Span {
-  id: string;
-  start: string;
-  end: string;
+export interface Lane {
+  lane: number;
+  /** Columns in this block's group of overlapping blocks */
+  of: number;
 }
 
-function overlaps(a: Span, b: Span): boolean {
-  return toMinutes(a.start) < toMinutes(b.end) && toMinutes(b.start) < toMinutes(a.end);
-}
+/**
+ * Side-by-side columns for a day's timeline, so overlapping blocks don't hide
+ * each other. Each block takes the first column free at its start; a group of
+ * blocks that chain into each other shares one column count.
+ */
+export function lanes(plan: Planned[]): Map<string, Lane> {
+  const result = new Map<string, Lane>();
+  const sorted = [...plan].sort((a, b) => a.startMs - b.startMs || b.endMs - a.endMs);
+  let group: Planned[] = [];
+  let groupEnd = -Infinity;
+  let laneEnds: number[] = [];
 
-/** First routine block sharing a weekday and a time range with `candidate`. */
-export function routineOverlap(routine: Block[], candidate: Block): { block: Block; day: number } | null {
-  for (const other of routine) {
-    if (other.id === candidate.id) continue;
-    const day = candidate.days.find((d) => other.days.includes(d));
-    if (day !== undefined && overlaps(candidate, other)) return { block: other, day };
+  const close = () => {
+    for (const p of group) result.get(p.id)!.of = laneEnds.length;
+    group = [];
+    laneEnds = [];
+  };
+  for (const p of sorted) {
+    if (p.startMs >= groupEnd) close();
+    let lane = laneEnds.findIndex((end) => end <= p.startMs);
+    if (lane === -1) lane = laneEnds.push(0) - 1;
+    laneEnds[lane] = p.endMs;
+    result.set(p.id, { lane, of: 1 });
+    group.push(p);
+    groupEnd = Math.max(groupEnd, p.endMs);
   }
-  return null;
-}
-
-/** First block in a day's plan that `candidate` would collide with. */
-export function planOverlap(plan: Planned[], candidate: Span): Planned | null {
-  return plan.find((p) => p.id !== candidate.id && overlaps(candidate, p)) ?? null;
+  close();
+  return result;
 }
