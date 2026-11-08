@@ -22,7 +22,7 @@ const WIDTH = 320;
 /** Tallest the widget gets: with the intention or review card open */
 const MAX_HEIGHT = 400;
 /** The docked bar: wide enough for everything the card shows, on one line */
-const DOCK_WIDTH = 800;
+const DOCK_WIDTH = 900;
 
 const $ = (id: string) => document.getElementById(id)!;
 const app = $('app');
@@ -72,6 +72,7 @@ function render(s: Snapshot) {
   const waitingNext = !s.current && s.next?.waiting;
   const [value, unit] = waitingNext ? ['…', ''] : s.current || s.next ? ringText(s.remainingMs) : ['✓', ''];
   $('ring-value').textContent = value;
+  $('ring-value').classList.toggle('long', value.length > 3);
   $('ring-unit').textContent = unit;
 
   // A block running underneath the one in front matters more than what's next

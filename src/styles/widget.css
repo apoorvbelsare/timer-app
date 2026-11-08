@@ -351,10 +351,10 @@ button:focus-visible {
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 20px;
   width: 100%;
   height: var(--bar-h, 48px);
-  padding: 4px 6px 4px 5px;
+  padding: 4px 8px 4px 7px;
   border: 1px solid var(--line);
   border-radius: 12px;
   background:
@@ -366,15 +366,21 @@ button:focus-visible {
 }
 .docked .ring {
   order: 1;
-  width: calc(var(--bar-h, 48px) - 10px);
-  height: calc(var(--bar-h, 48px) - 10px);
+  width: calc(var(--bar-h, 48px) - 12px);
+  height: calc(var(--bar-h, 48px) - 12px);
+  margin-right: -4px;
 }
 .docked .track,
 .docked .arc {
-  stroke-width: 10;
+  stroke-width: 8;
 }
 .docked #ring-value {
-  font-size: 13px;
+  font-size: 12px;
+}
+/* "6h02" and the like: smaller, so it sits inside the ring with room around it */
+.docked #ring-value.long {
+  font-size: 9.5px;
+  letter-spacing: -0.02em;
 }
 .docked #ring-unit {
   display: none;
@@ -383,14 +389,23 @@ button:focus-visible {
   order: 2;
   display: grid;
   grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
-  column-gap: 14px;
-  row-gap: 1px;
+  column-gap: 0;
+  row-gap: 2px;
   align-items: center;
+}
+/* A thin rule between "what's on" and "when", with room either side */
+.docked .until,
+.docked .next {
+  padding-left: 16px;
+  border-left: 1px solid var(--line);
+}
+.docked .step {
+  padding-right: 16px;
 }
 .docked .title {
   grid-column: 1;
   grid-row: 1;
-  padding-right: 0;
+  padding-right: 16px;
   font-size: 14.5px;
   line-height: 1.2;
 }
@@ -425,7 +440,8 @@ button:focus-visible {
   order: 4;
   flex: none;
   flex-wrap: nowrap;
-  max-width: 280px;
+  gap: 8px;
+  max-width: 300px;
   margin: 0;
   overflow: hidden;
   font-size: 10px;
@@ -443,6 +459,8 @@ button:focus-visible {
 .docked .corner {
   order: 5;
   position: static;
+  gap: 2px;
+  margin-left: auto;
   opacity: 0.75;
 }
 .docked .corner:hover {
