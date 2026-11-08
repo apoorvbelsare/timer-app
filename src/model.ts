@@ -63,6 +63,8 @@ export interface Settings {
   widgetPos: { x: number; y: number } | null;
   /** Ask for an intention when a block starts */
   askIntention: boolean;
+  /** The installed app has turned on "start with Windows" once; after that it's the person's call */
+  autostartConfigured: boolean;
   ambient: Ambient;
   ambientVolume: number;
 }
@@ -88,6 +90,7 @@ export function defaultSettings(): Settings {
     escalateAfterMin: 5,
     widgetPos: null,
     askIntention: true,
+    autostartConfigured: false,
     ambient: 'off',
     ambientVolume: 0.5,
   };

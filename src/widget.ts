@@ -330,9 +330,13 @@ async function main() {
     tick();
   });
 
+  // The first installed run turns on "start with Windows", even if dev runs already
+  // created the state file. Dev builds never register: they'd point at a throwaway exe.
+  if (inTauri && import.meta.env.PROD && !getState().settings.autostartConfigured) {
+    await enableAutostart().catch(() => {});
+    await update((d) => void (d.settings.autostartConfigured = true));
+  }
   if (wasFirstRun()) {
-    // Registering the dev build with Windows startup would point at a throwaway exe
-    if (inTauri && import.meta.env.PROD) await enableAutostart().catch(() => {});
     await update(() => {}); // write the first state file
     void openPlanner();
   }
