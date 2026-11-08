@@ -2,11 +2,11 @@
 
 **A calm visual timer for ADHD brains, for your daily routine.**
 
-Timer sits in the corner of your screen all day. It shows what you're meant to be doing right now, how much of it is left as a ring that shrinks, and what comes next, so you don't have to keep time in your head. Around that it adds the things that help an ADHD day hold together: warnings before you have to switch, a nudge when hyperfocus keeps you past the end of a block, a quiet focus mode, a place to park stray thoughts, an hourly tune, and a garden that grows every time you show up.
+Timer sits in the empty middle of your taskbar, or in a corner of your screen, all day. It shows what you're meant to be doing right now, how much of it is left as a ring that shrinks, and what comes next, so you don't have to keep time in your head. Around that it adds the things that help an ADHD day hold together: warnings before you have to switch, a nudge when hyperfocus keeps you past the end of a block, a quiet focus mode, a place to park stray thoughts, an hourly tune, and a garden that grows every time you show up.
 
 Everything stays on your PC. There's no account, no cloud and no tracking.
 
-> **Use the `feat/garden-parking-lot` branch.** It's the latest version of Timer as of **8 November 2026** (v0.3.0), and the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
+> **`main` has the latest version of Timer (v0.4.0, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
 
 ---
 
@@ -30,6 +30,10 @@ Many people with ADHD struggle to sense time passing (often called *time blindne
 
 ### See your time
 - **Always-on widget:** a small card that stays on top, wherever you drag it. It shows a ring that shrinks as the current block runs out, the block's name and current step, and what's next. The ring changes from the block's colour to amber to coral near the end.
+- **Taskbar dock:** the widget can sit inside the taskbar instead, as one wide bar in the empty middle. It shows everything the card does on a single line: ring, block, step or intention, time left, what's next, the day strip, and the Breathe / Stretch / Parked chips. Prompts open as a card just above it.
+  - **Drag the bar up** off the taskbar and it becomes the floating card again. **Drag the card onto the taskbar** and it docks. Drag the bar sideways to move it along the taskbar.
+  - It stays above the taskbar when you click the taskbar, and hides while a fullscreen video, game or presentation is up.
+  - It suits a taskbar with left-aligned icons (Settings → Personalization → Taskbar → Taskbar behaviors → Taskbar alignment: Left), so the middle is free.
 - **Day strip:** a thin bar of your whole day under the ring, with a marker for "now".
 - **Hourly ping:** a short tune on every hour, different for each of the 24. Morning tunes rise and sound bright, afternoon tunes go up then down, and evening tunes fall low and soft. So even a tune you haven't learned yet tells you roughly what time it is. The widget glows for a moment and says the hour plus what's on ("3 pm · 40m left in Deep work"). It stays silent during quiet hours (10pm–7am by default).
 
@@ -83,13 +87,12 @@ If a `Timer_x.y.z_x64-setup.exe` is attached to the [Releases](https://github.co
    ```bash
    git clone https://github.com/apoorvbelsare/timer-app.git
    cd timer-app
-   git checkout feat/garden-parking-lot
    npm install
    npm run tauri build
    ```
 
 3. Run the installer it creates:
-   `src-tauri\target\release\bundle\nsis\Timer_0.3.0_x64-setup.exe`
+   `src-tauri\target\release\bundle\nsis\Timer_0.4.0_x64-setup.exe`
 
 After installing, **Timer** is in your Start menu, and it **starts with Windows** from the first launch. You can turn that off in Settings. To uninstall: **Windows Settings → Apps → Timer**.
 
@@ -133,6 +136,7 @@ Build or download the newer installer and run it over the old one. Your routine 
 | Full screen in focus mode | **F11** |
 | "Give me 10 more minutes" on the full-screen card | **Esc** |
 | Move the widget | Drag it |
+| Dock to the taskbar / float again | Drag it onto or off the taskbar, the dock button on the widget, or tray → **Dock to taskbar** |
 | Let clicks pass through the widget | Tray → **Lock widget (click-through)** |
 | Hide the widget / quit | Tray menu |
 
@@ -145,6 +149,7 @@ Closing a window only hides it; Timer keeps running in the tray. Use **Quit** in
 | Part | Choice | Why |
 | --- | --- | --- |
 | Desktop shell | [Tauri 2](https://tauri.app) (Rust) | A small, native Windows app that idles at about 30–50 MB of RAM. That matters for something running all day; an Electron app would idle at 150 MB or more. |
+| Windows APIs | [`windows`](https://crates.io/crates/windows) crate | Keeps the docked bar above the taskbar and notices fullscreen apps. |
 | UI | TypeScript + [Vite](https://vitejs.dev), plain DOM (no framework) | Five small windows don't need React. It keeps the bundle tiny and the code direct. |
 | Rendering | SVG (rings, garden, hills) and Canvas (the bird flock) | Sharp at any size, animated with almost no CPU. |
 | Sound | Web Audio API | Every chime, hourly tune and ambient sound (rain, forest, brown noise) is generated in code, so the app ships no audio files. |
@@ -158,9 +163,10 @@ Closing a window only hides it; Timer keeps running in the tray. Use **Quit** in
 ```
  Rust shell (src-tauri)           Web windows (src)
  ─────────────────────            ─────────────────
- tray menu, autostart,            widget   – the always-on card
+ tray menu, autostart,            widget   – the always-on card, or the taskbar bar
  global shortcut,         ◄──►    planner  – Today, Routine, Garden, Parking lot, Settings
- state file on disk               focus    – focus mode, sounds, breaks
+ state file on disk,              focus    – focus mode, sounds, breaks
+ keeping the dock on top
                                   overlay  – full-screen "time to switch"
                                   capture  – the parking-lot box
 ```
@@ -194,15 +200,17 @@ npm run tauri build   # build the Windows installer
 | `src/widget.ts`, `planner.ts`, `planner-pages.ts`, `focus.ts`, `overlay.ts`, `capture.ts` | The windows |
 | `src/sounds.ts`, `birds.ts`, `alerts.ts` | Ambient sound, the bird flock, chimes and notifications |
 | `src/styles/` | One stylesheet per window, plus `theme.css` for the shared palette |
-| `src-tauri/` | The Rust shell: tray, windows, plugins, saving the state file |
+| `src-tauri/` | The Rust shell: tray, windows, plugins, saving the state file, keeping the docked bar on top |
 
 ### Branches
 
-The repo keeps a few separate versions of the app side by side. They're never merged.
+`main` is the current app. The other branches are earlier versions and experiments, kept side by side for reference.
 
 | Branch | What it is |
 | --- | --- |
-| `feat/garden-parking-lot` | **Use this one: the latest version as of 8 November 2026 (v0.3.0).** Flown style plus the garden, parking lot and hourly ping |
+| `main` | **Use this one: the latest version (v0.4.0, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
+| `feat/taskbar-dock` | Where the taskbar dock was built; the same as `main` |
+| `feat/garden-parking-lot` | v0.3.0: Flown style plus the garden, parking lot and hourly ping |
 | `feat/flown-style` | The Flown-inspired version without those three additions |
 | `feat/sunsama-style` | An experiment with Sunsama-style daily planning, tasks and weekly goals |
 | `feat/mvp` | The first, plain version |
