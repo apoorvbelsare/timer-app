@@ -1,8 +1,9 @@
 import '@fontsource-variable/fraunces';
 import '@fontsource-variable/nunito';
 import { enable as enableAutostart } from '@tauri-apps/plugin-autostart';
+import { invoke } from '@tauri-apps/api/core';
 import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
-import { emit } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { Window, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
 import { dismissIntention, logBlock, setIntention, skipToday, snooze, startBlock } from './actions';
 import { chime, notify, playTune, unlockAudioOnClick } from './alerts';
@@ -19,6 +20,8 @@ import './styles/widget.css';
 const WIDTH = 320;
 /** Tallest the widget gets: with the intention or review card open */
 const MAX_HEIGHT = 260;
+/** The docked bar: wide enough for everything the card shows, on one line */
+const DOCK_WIDTH = 800;
 
 const $ = (id: string) => document.getElementById(id)!;
 const app = $('app');
@@ -235,15 +238,135 @@ function renderPrompt(s: Snapshot) {
   }
 }
 
-/** The window follows the card's height, so the widget never clips or leaves a gap. */
-function fitWindow() {
-  let height = 0;
-  new ResizeObserver(() => {
-    const next = Math.min(MAX_HEIGHT, Math.ceil(app.getBoundingClientRect().height) + 8);
-    if (next === height) return;
-    height = next;
-    void win?.setSize(new LogicalSize(WIDTH, next));
-  }).observe(app);
+// ── Window placement ─────────────────────────────────────────────────────────
+
+let mode: 'float' | 'dock' = 'float';
+let fitted = '';
+let placedDockX: number | null = null;
+/** Our own moves fire onMoved too; those mustn't count as the person dragging */
+let placingUntil = 0;
+
+async function moveTo(x: number, y: number) {
+  placingUntil = Date.now() + 500;
+  await win?.setPosition(new PhysicalPosition(Math.round(x), Math.round(y)));
+}
+
+interface Taskbar {
+  top: number;
+  bottom: number;
+  left: number;
+  width: number;
+  scale: number;
+}
+
+/** The strip below the work area, in physical pixels. */
+async function taskbar(): Promise<Taskbar | null> {
+  const monitor = await currentMonitor();
+  if (!monitor) return null;
+  const scale = monitor.scaleFactor;
+  const bottom = monitor.position.y + monitor.size.height;
+  const workBottom = monitor.workArea.position.y + monitor.workArea.size.height;
+  // An auto-hiding or side taskbar leaves no strip at the bottom: borrow the usual 48px
+  const top = workBottom < bottom ? workBottom : bottom - Math.round(48 * scale);
+  return { top, bottom, left: monitor.position.x, width: monitor.size.width, scale };
+}
+
+/**
+ * The window follows the card's height, so the widget never clips or leaves a gap.
+ * Docked, the bar fills the taskbar's height and any prompt card grows upward from it.
+ */
+async function fitWindow() {
+  if (!win) return;
+  if (mode === 'float') {
+    const height = Math.min(MAX_HEIGHT, Math.ceil(app.getBoundingClientRect().height) + 8);
+    if (fitted === `float:${height}`) return;
+    fitted = `float:${height}`;
+    return win.setSize(new LogicalSize(WIDTH, height));
+  }
+  const tb = await taskbar();
+  if (!tb) return;
+  app.style.setProperty('--bar-h', `${(tb.bottom - tb.top) / tb.scale}px`);
+  const height = Math.ceil(app.getBoundingClientRect().height);
+  const dockX = getState().settings.dockX;
+  const key = `dock:${height}:${dockX}:${tb.top}`;
+  if (fitted === key) return;
+  fitted = key;
+  placedDockX = dockX;
+  const width = Math.round(DOCK_WIDTH * tb.scale);
+  const x = Math.min(Math.max(dockX ?? tb.left + (tb.width - width) / 2, tb.left), tb.left + tb.width - width);
+  const y = tb.bottom - Math.round(height * tb.scale);
+  // Growing: move up first, so the window never hangs below the screen for a frame
+  await moveTo(x, y);
+  await win.setSize(new LogicalSize(DOCK_WIDTH, height));
+}
+
+async function placeWidget() {
+  if (!win) return;
+  if (mode === 'dock') return fitWindow();
+  const saved = getState().settings.widgetPos;
+  if (saved) return moveTo(saved.x, saved.y);
+  // Bottom-right, with room above the taskbar for the tallest card
+  const monitor = await currentMonitor();
+  if (!monitor) return;
+  const scale = monitor.scaleFactor;
+  const x = monitor.position.x + monitor.size.width - Math.round((WIDTH + 24) * scale);
+  const y = monitor.position.y + monitor.size.height - Math.round((MAX_HEIGHT + 72) * scale);
+  await moveTo(x, y);
+}
+
+/** Switch between the floating card and the taskbar bar to match settings. */
+async function applyMode() {
+  mode = getState().settings.widgetMode;
+  fitted = '';
+  app.classList.toggle('docked', mode === 'dock');
+  const toggle = $('toggle-dock');
+  toggle.title = toggle.ariaLabel = mode === 'dock' ? 'Float the widget' : 'Dock to taskbar';
+  if (inTauri) void invoke('set_docked', { docked: mode === 'dock' }).catch(() => {});
+  await fitWindow();
+  await placeWidget();
+}
+
+const setMode = (next: 'float' | 'dock') => update((d) => void (d.settings.widgetMode = next));
+
+/**
+ * Where a drag ends decides the mode: pull the bar up off the taskbar and it
+ * floats; drop the card onto the taskbar and it docks. Anything else stays put.
+ */
+async function settle(x: number, y: number) {
+  if (!win) return;
+  const tb = await taskbar();
+  const size = await win.outerSize();
+  const bottom = y + size.height;
+  if (!tb) return update((d) => void (d.settings.widgetPos = { x, y }));
+  const offset = Math.round(((DOCK_WIDTH - WIDTH) / 2) * tb.scale);
+  if (mode === 'dock') {
+    if (bottom < tb.top) {
+      return update((d) => {
+        d.settings.widgetMode = 'float';
+        d.settings.widgetPos = { x: x + offset, y: bottom - Math.round(140 * tb.scale) };
+      });
+    }
+    // Slid along the taskbar: keep the new spot and snap back down onto it
+    fitted = '';
+    await update((d) => void (d.settings.dockX = x));
+    return fitWindow();
+  }
+  if (bottom > tb.top + Math.round(12 * tb.scale)) {
+    return update((d) => {
+      d.settings.widgetMode = 'dock';
+      d.settings.dockX = x - offset;
+    });
+  }
+  await update((d) => void (d.settings.widgetPos = { x, y }));
+}
+
+function rememberPosition() {
+  let timer: number | undefined;
+  void win?.onMoved(({ payload }) => {
+    if (Date.now() < placingUntil) return;
+    clearTimeout(timer);
+    timer = window.setTimeout(() => void settle(payload.x, payload.y), 500);
+  });
 }
 
 // ── Alerts ───────────────────────────────────────────────────────────────────
@@ -354,29 +477,6 @@ async function showOverlay() {
   await overlay?.setFocus();
 }
 
-// ── Window placement ─────────────────────────────────────────────────────────
-
-async function placeWidget() {
-  if (!win) return;
-  const saved = getState().settings.widgetPos;
-  if (saved) return win.setPosition(new PhysicalPosition(saved.x, saved.y));
-  // Bottom-right, with room above the taskbar for the tallest card
-  const monitor = await currentMonitor();
-  if (!monitor) return;
-  const scale = monitor.scaleFactor;
-  const x = monitor.position.x + monitor.size.width - Math.round((WIDTH + 24) * scale);
-  const y = monitor.position.y + monitor.size.height - Math.round((MAX_HEIGHT + 72) * scale);
-  await win.setPosition(new PhysicalPosition(x, y));
-}
-
-function rememberPosition() {
-  let timer: number | undefined;
-  void win?.onMoved(({ payload }) => {
-    clearTimeout(timer);
-    timer = window.setTimeout(() => update((d) => (d.settings.widgetPos = { x: payload.x, y: payload.y })), 600);
-  });
-}
-
 // ── Start up ─────────────────────────────────────────────────────────────────
 
 function tick() {
@@ -387,9 +487,9 @@ function tick() {
 
 async function main() {
   await initStore();
-  await placeWidget();
+  await applyMode();
   rememberPosition();
-  fitWindow();
+  new ResizeObserver(() => void fitWindow()).observe(app);
   unlockAudioOnClick();
 
   app.addEventListener('mousedown', (e) => {
@@ -400,11 +500,16 @@ async function main() {
   });
   $('open-planner').addEventListener('click', () => void openPlanner());
   $('open-focus').addEventListener('click', () => void openFocus());
+  $('toggle-dock').addEventListener('click', () => void setMode(mode === 'dock' ? 'float' : 'dock'));
+  if (inTauri) void listen('toggle-dock', () => void setMode(mode === 'dock' ? 'float' : 'dock'));
 
   watchGarden();
   subscribe((state) => {
     watchGarden();
-    if (state.settings.widgetPos === null) void placeWidget();
+    const { widgetMode, widgetPos, dockX } = state.settings;
+    if (widgetMode !== mode) void applyMode();
+    else if (mode === 'float' && widgetPos === null) void placeWidget();
+    else if (mode === 'dock' && dockX !== placedDockX) void fitWindow();
     tick();
   });
 

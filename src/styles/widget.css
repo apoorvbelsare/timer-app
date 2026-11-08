@@ -332,3 +332,136 @@ button:focus-visible {
   outline: 2px solid var(--sage);
   outline-offset: 1px;
 }
+
+/* ── Docked: one wide bar in the empty middle of the taskbar ── */
+.bar {
+  display: contents;
+}
+.widget.docked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+.docked .bar {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: var(--bar-h, 48px);
+  padding: 4px 6px 4px 5px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background:
+    radial-gradient(60% 160% at 100% 0%, rgba(157, 184, 160, 0.14), transparent 60%),
+    var(--bg);
+}
+.docked .main {
+  display: contents;
+}
+.docked .ring {
+  order: 1;
+  width: calc(var(--bar-h, 48px) - 10px);
+  height: calc(var(--bar-h, 48px) - 10px);
+}
+.docked .track,
+.docked .arc {
+  stroke-width: 10;
+}
+.docked #ring-value {
+  font-size: 13px;
+}
+.docked #ring-unit {
+  display: none;
+}
+.docked .info {
+  order: 2;
+  display: grid;
+  grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+  column-gap: 14px;
+  row-gap: 1px;
+  align-items: center;
+}
+.docked .title {
+  grid-column: 1;
+  grid-row: 1;
+  padding-right: 0;
+  font-size: 14.5px;
+  line-height: 1.2;
+}
+.docked .title:has(+ .step[hidden]) {
+  grid-row: 1 / span 2;
+}
+.docked .step {
+  grid-column: 1;
+  grid-row: 2;
+  font-size: 11.5px;
+}
+.docked .until {
+  grid-column: 2;
+  grid-row: 1;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.docked .next {
+  grid-column: 2;
+  grid-row: 2;
+  font-size: 11.5px;
+}
+.docked .strip {
+  order: 3;
+  flex: 0 0 130px;
+  height: 6px;
+  margin: 0;
+}
+.docked .extras {
+  order: 4;
+  flex: none;
+  flex-wrap: nowrap;
+  max-width: 280px;
+  margin: 0;
+  overflow: hidden;
+  font-size: 10px;
+}
+.docked .chip {
+  padding: 2px 8px;
+  font-size: 11.5px;
+  white-space: nowrap;
+}
+.docked .news {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.docked .corner {
+  order: 5;
+  position: static;
+  opacity: 0.75;
+}
+.docked .corner:hover {
+  opacity: 1;
+}
+/* Prompts open above the bar, as their own card */
+.docked .prompt {
+  box-sizing: border-box;
+  order: -1;
+  width: 440px;
+  margin: 0 0 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--bg);
+}
+.docked.hour-pulse {
+  animation: none;
+}
+.docked.hour-pulse .bar {
+  animation: hour-pulse 2.4s ease-out;
+}

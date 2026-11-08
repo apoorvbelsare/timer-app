@@ -61,6 +61,10 @@ export interface Settings {
   /** Minutes after a block ends before a toast; twice this before the overlay */
   escalateAfterMin: number;
   widgetPos: { x: number; y: number } | null;
+  /** Floating card, or a wide bar sitting in the empty middle of the taskbar */
+  widgetMode: 'float' | 'dock';
+  /** Where the docked bar sits along the taskbar; null centres it */
+  dockX: number | null;
   /** Ask for an intention when a block starts */
   askIntention: boolean;
   /** The installed app has turned on "start with Windows" once; after that it's the person's call */
@@ -104,6 +108,8 @@ export function defaultSettings(): Settings {
     chime: true,
     escalateAfterMin: 5,
     widgetPos: null,
+    widgetMode: 'float',
+    dockX: null,
     askIntention: true,
     autostartConfigured: false,
     ambient: 'off',

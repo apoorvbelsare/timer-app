@@ -678,8 +678,8 @@ function renderSettings(): HTMLElement {
       h(
         'div',
         { class: 'setting' },
-        h('div', {}, h('h3', {}, 'Widget position'), h('p', { class: 'sub' }, 'Drag the widget anywhere. This puts it back in the bottom-right corner.')),
-        h('button', { class: 'btn ghost small', onClick: () => update((d) => void (d.settings.widgetPos = null)) }, 'Reset'),
+        h('div', {}, h('h3', {}, 'Widget position'), h('p', { class: 'sub' }, 'Drag the widget anywhere, or onto the taskbar to dock it there. This puts it back in the bottom-right corner, or the middle of the taskbar when docked.')),
+        h('button', { class: 'btn ghost small', onClick: () => update((d) => void ((d.settings.widgetPos = null), (d.settings.dockX = null))) }, 'Reset'),
       ),
     ),
   );
