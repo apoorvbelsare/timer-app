@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Window } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { addTodo, ensureDay, fireEvent, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, toggleTodo } from './actions';
+import { addTodo, ensureDay, fireEvent, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, stepDone, stepUndo, toggleTodo } from './actions';
 import { chime, playTune, unlockAudioOnClick } from './alerts';
 import { hourLabel, hourTune } from './hourly';
 import { h } from './dom';
@@ -147,9 +147,18 @@ function renderToday(): HTMLElement {
         p.oneOff && h('span', { class: 'tag' }, 'today only'),
         p.movedToday && h('span', { class: 'tag' }, 'moved'),
         status && h('span', { class: `tag status-${status}` }, STATUS_LABEL[status]),
+        p.steps.length > 0 && h('span', { class: 'tag' }, `${Math.min(stepsDoneFor(p), p.steps.length)}/${p.steps.length} steps`),
       ),
+      // The steps themselves, as far down as the block has room for
+      p.steps.length > 0 &&
+        h(
+          'ol',
+          { class: 'tl-steps' },
+          p.steps.map((st, i) => h('li', { class: i < stepsDoneFor(p) ? 'done' : i === stepsDoneFor(p) && live.current?.id === p.id ? 'on' : '' }, st.name)),
+        ),
     );
   };
+  const stepsDoneFor = (p: Planned) => rec.stepsDone[p.id]?.length ?? 0;
 
   const timeline = h(
     'div',
@@ -270,6 +279,41 @@ function ritualGroup(p: Planned, key: string, ended: boolean) {
   );
 }
 
+/** The block's steps, ticked off in order: the same list as on the widget. */
+function stepsGroup(p: Planned, key: string) {
+  const done = dayRecord(getState(), key).stepsDone[p.id]?.length ?? 0;
+  return h(
+    'div',
+    { class: 'group' },
+    h('h3', {}, `Steps · ${Math.min(done, p.steps.length)} of ${p.steps.length} done`),
+    h(
+      'ol',
+      { class: 'step-checklist' },
+      p.steps.map((st, i) => {
+        // Tick the next one; untick only the last one ticked
+        const canTick = !p.waiting && i === done;
+        const canUntick = i === done - 1;
+        return h(
+          'li',
+          { class: i < done ? 'done' : i === done ? 'on' : '' },
+          h(
+            'label',
+            { class: 'check' },
+            h('input', {
+              type: 'checkbox',
+              checked: i < done,
+              disabled: !canTick && !canUntick,
+              onChange: () => (canTick ? stepDone(key, p.id) : stepUndo(key, p.id)),
+            }),
+            h('span', {}, `${i + 1}. ${st.name}`),
+          ),
+          st.minutes > 0 && h('span', { class: 'sub small' }, `${st.minutes}m`),
+        );
+      }),
+    ),
+  );
+}
+
 function renderTodayDetail(p: Planned, key: string, now: number) {
   const status = dayRecord(getState(), key).log[p.id];
   const ended = !p.waiting && p.endMs <= now;
@@ -323,6 +367,7 @@ function renderTodayDetail(p: Planned, key: string, now: number) {
                 ),
               )
             : null,
+          p.steps.length > 0 && stepsGroup(p, key),
           ritualGroup(p, key, ended),
           h(
             'div',

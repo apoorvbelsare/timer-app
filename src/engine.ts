@@ -112,7 +112,11 @@ export function planFor(state: AppState, date: Date, includeSkipped = false): Pl
         const fired = anchor.kind === 'block' ? rec.finishedAt[anchor.id] : rec.events[anchor.id]?.[0];
         const latest = block.latestStart ? atMinutes(date, toMinutes(block.latestStart)) : undefined;
         const trigger = rec.startedAt[block.id] ?? fired ?? latest;
-        if (trigger === undefined) waiting = true;
+        const closed = rec.finishedAt[block.id];
+        // Answered (done, skipped) before its anchor came: it's over, and stays at its planned slot
+        if (closed !== undefined && (trigger === undefined || closed < trigger)) {
+          // nothing to move
+        } else if (trigger === undefined) waiting = true;
         else {
           startMs = trigger;
           endMs = trigger + (planEndMs - planStartMs);
@@ -178,11 +182,13 @@ export function snapshot(state: AppState, now: number): Snapshot {
   const plan = planFor(state, date);
   // Blocks may overlap. The one that started last is the one in front: a call
   // inside a deep-work block takes over for its length, then deep work returns.
-  const running = plan.filter((p) => !p.waiting && p.startMs <= now && now < p.endMs);
+  // A block answered before it even began (skipped ahead of time) never runs
+  const closedEarly = (p: Planned) => rec.finishedAt[p.id] !== undefined && rec.finishedAt[p.id] < p.startMs;
+  const running = plan.filter((p) => !p.waiting && !closedEarly(p) && p.startMs <= now && now < p.endMs);
   const current = running[running.length - 1] ?? null;
   const alsoRunning = running.slice(0, -1).reverse();
   // A waiting block is "next" even once its planned time has passed: it's still to come
-  const next = plan.find((p) => p.waiting || p.startMs > now) ?? null;
+  const next = plan.find((p) => !closedEarly(p) && (p.waiting || p.startMs > now)) ?? null;
 
   let awaitingStart = false;
   let remainingMs = 0;

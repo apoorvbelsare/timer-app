@@ -195,6 +195,19 @@ describe('chained blocks', () => {
     expect(snapshot(s, at('20:45')).current).toMatchObject({ id: 'study', start: '20:40', end: '21:40' });
   });
 
+  it('never runs once skipped, even if skipped while still waiting', () => {
+    const s = stateWith([morning, work], (st) => {
+      st.days[KEY] = { ...emptyDay(), log: { work: 'skipped', morning: 'done' }, finishedAt: { work: at('07:10'), morning: at('07:40') } };
+    });
+    const snap = snapshot(s, at('09:30'));
+    expect(snap.plan.find((p) => p.id === 'work')).toMatchObject({ waiting: false, start: '09:00' });
+    expect(snap.current).toBeNull();
+    expect(snap.next).toBeNull();
+    // A plain block skipped ahead of its time doesn't run either
+    const plain = stateWith([block('a', '10:00', '11:00')], (st) => (st.days[KEY] = { ...emptyDay(), log: { a: 'skipped' }, finishedAt: { a: at('08:00') } }));
+    expect(snapshot(plain, at('10:30')).current).toBeNull();
+  });
+
   it('goes back to the clock when its anchor isn’t on today', () => {
     const s = stateWith([block('work', '09:00', '12:00', { after: { kind: 'block', id: 'gone' } })]);
     expect(snapshot(s, at('09:30')).current?.id).toBe('work');
