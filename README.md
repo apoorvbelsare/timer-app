@@ -6,6 +6,8 @@ Timer sits in the corner of your screen all day. It shows what you're meant to b
 
 Everything stays on your PC. There's no account, no cloud and no tracking.
 
+> **Use the `feat/garden-parking-lot` branch.** It's the latest version of Timer as of **8 November 2026** (v0.3.0), and the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
+
 ---
 
 ## Why it works this way
@@ -200,7 +202,7 @@ The repo keeps a few separate versions of the app side by side. They're never me
 
 | Branch | What it is |
 | --- | --- |
-| `feat/garden-parking-lot` | **The current app.** Flown style plus the garden, parking lot and hourly ping |
+| `feat/garden-parking-lot` | **Use this one: the latest version as of 8 November 2026 (v0.3.0).** Flown style plus the garden, parking lot and hourly ping |
 | `feat/flown-style` | The Flown-inspired version without those three additions |
 | `feat/sunsama-style` | An experiment with Sunsama-style daily planning, tasks and weekly goals |
 | `feat/mvp` | The first, plain version |
