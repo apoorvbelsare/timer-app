@@ -1,20 +1,25 @@
 import '@fontsource-variable/fraunces';
 import '@fontsource-variable/nunito';
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as autostartEnabled } from '@tauri-apps/plugin-autostart';
+import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Window } from '@tauri-apps/api/window';
-import { addTodo, ensureDay, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, toggleTodo } from './actions';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
+import { addTodo, ensureDay, fireEvent, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, toggleTodo } from './actions';
 import { chime, playTune, unlockAudioOnClick } from './alerts';
 import { hourLabel, hourTune } from './hourly';
 import { h } from './dom';
-import { type Planned, dayRecord, lanes, planFor, snapshot } from './engine';
+import { type Planned, anchorLabel, dayRecord, lanes, planFor, shifted, snapshot } from './engine';
 import {
+  type Anchor,
   type Block,
   type BlockStatus,
+  type EventDef,
   DAY_NAMES,
   PALETTE,
   daysLabel,
   dayKey,
+  formatClock,
   formatDuration,
   fromMinutes,
   minuteOfDay,
@@ -101,12 +106,22 @@ function renderToday(): HTMLElement {
   const plannedMs = plan.filter((p) => !p.skippedToday).reduce((sum, p) => sum + (p.endMs - p.startMs), 0);
   const columns = lanes(plan);
 
+  const slot = (startMs: number, endMs: number) =>
+    `top:${minuteOfDay(startMs) * PX_PER_MIN}px;height:${Math.max(22, ((endMs - startMs) / 60_000) * PX_PER_MIN)}px`;
+
+  // Where a chained block was planned, behind where it actually ran
+  const ghostEl = (p: Planned) =>
+    h('div', { class: 'tl-ghost', style: `${slot(p.planStartMs, p.planEndMs)};--c:${p.color}` }, h('span', {}, `${p.name} · planned ${p.planStart}`));
+
+  const eventMarks = state.events.flatMap((e) =>
+    (rec.events[e.id] ?? []).map((t) => h('div', { class: 'tl-event', style: `top:${minuteOfDay(t) * PX_PER_MIN}px` }, h('span', {}, `${e.name} · ${formatClock(t)}`))),
+  );
+
   const blockEl = (p: Planned) => {
     const status = rec.log[p.id];
-    const top = toMinutes(p.start) * PX_PER_MIN;
-    const height = Math.max(22, (toMinutes(p.end) - toMinutes(p.start)) * PX_PER_MIN);
     const { lane, of } = columns.get(p.id)!;
     const classes = ['tl-block'];
+    if (p.waiting) classes.push('waiting');
     if (p.skippedToday) classes.push('skipped');
     if (p.id === selectedToday) classes.push('selected');
     if (live.current?.id === p.id) classes.push('current');
@@ -114,7 +129,7 @@ function renderToday(): HTMLElement {
       'button',
       {
         class: classes.join(' '),
-        style: `top:${top}px;height:${height}px;--c:${p.color};--lane:${lane};--lanes:${of}`,
+        style: `${slot(p.startMs, p.endMs)};--c:${p.color};--lane:${lane};--lanes:${of}`,
         onClick: () => {
           selectedToday = p.id;
           oneOffDraft = null;
@@ -123,10 +138,11 @@ function renderToday(): HTMLElement {
         },
       },
       h('span', { class: 'tl-name' }, p.name),
-      h('span', { class: 'tl-time' }, `${p.start}–${p.end}`),
+      h('span', { class: 'tl-time' }, p.waiting ? `${p.planStart}–${p.planEnd} planned` : `${p.start}–${p.end}`),
       h(
         'span',
         { class: 'tags' },
+        p.after && h('span', { class: 'tag' }, p.waiting ? `waits ${anchorLabel(state, p)}` : anchorLabel(state, p)),
         p.optional && h('span', { class: 'tag' }, 'optional'),
         p.oneOff && h('span', { class: 'tag' }, 'today only'),
         p.movedToday && h('span', { class: 'tag' }, 'moved'),
@@ -141,7 +157,9 @@ function renderToday(): HTMLElement {
     Array.from({ length: 24 }, (_, hr) =>
       h('div', { class: 'hour', style: `top:${hr * 60 * PX_PER_MIN}px` }, h('span', {}, `${String(hr).padStart(2, '0')}:00`)),
     ),
+    plan.filter(shifted).map(ghostEl),
     plan.map(blockEl),
+    eventMarks,
     h('div', { class: 'now-line', style: `top:${minuteOfDay(now) * PX_PER_MIN}px` }),
   );
 
@@ -163,6 +181,12 @@ function renderToday(): HTMLElement {
       'header',
       { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Today'), h('p', { class: 'sub' }, `${date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · ${formatDuration(plannedMs)} planned`)),
+      state.events.length > 0 &&
+        h(
+          'div',
+          { class: 'row push' },
+          state.events.map((e) => h('button', { class: 'btn ghost small', title: `Mark “${e.name}” as just happened`, onClick: () => fireEvent(key, e.id) }, `✓ ${e.name}`)),
+        ),
       h(
         'button',
         {
@@ -248,10 +272,15 @@ function ritualGroup(p: Planned, key: string, ended: boolean) {
 
 function renderTodayDetail(p: Planned, key: string, now: number) {
   const status = dayRecord(getState(), key).log[p.id];
-  const ended = p.endMs <= now;
-  const running = p.startMs <= now && now < p.endMs;
-  let start = p.start;
-  let end = p.end;
+  const ended = !p.waiting && p.endMs <= now;
+  const running = !p.waiting && p.startMs <= now && now < p.endMs;
+  let start = p.planStart;
+  let end = p.planEnd;
+  const when = p.waiting
+    ? `Planned ${p.planStart}–${p.planEnd} · waits ${anchorLabel(getState(), p)}`
+    : shifted(p)
+      ? `${p.start}–${p.end} · planned ${p.planStart}–${p.planEnd}`
+      : `${p.start}–${p.end}${p.after ? ` · ${anchorLabel(getState(), p)}` : ''}`;
 
   const moveToday = () => {
     if (toMinutes(end) <= toMinutes(start)) return fail('The end needs to be after the start.');
@@ -267,18 +296,24 @@ function renderTodayDetail(p: Planned, key: string, now: number) {
   return h(
     'div',
     { class: 'detail' },
-    h('div', { class: 'detail-head', style: `--c:${p.color}` }, h('h2', {}, p.name), h('p', { class: 'sub' }, `${p.start}–${p.end}`)),
+    h('div', { class: 'detail-head', style: `--c:${p.color}` }, h('h2', {}, p.name), h('p', { class: 'sub' }, when)),
     p.skippedToday
       ? h('div', { class: 'group' }, h('p', {}, 'Skipped for today.'), h('button', { class: 'btn', onClick: () => restoreToday(key, p.id) }, 'Bring it back'))
       : [
-          running && p.optional && !dayRecord(getState(), key).startedAt[p.id]
-            ? h('div', { class: 'group' }, h('button', { class: 'btn primary', onClick: () => startBlock(key, p.id) }, 'Start now'))
+          (running && p.optional && !dayRecord(getState(), key).startedAt[p.id]) || p.waiting
+            ? h(
+                'div',
+                { class: 'group' },
+                h('button', { class: 'btn primary', onClick: () => startBlock(key, p.id) }, 'Start now'),
+                p.waiting && h('p', { class: 'sub small' }, `Starts by itself ${anchorLabel(getState(), p)}${p.latestStart ? `, or at ${p.latestStart} at the latest` : ''}.`),
+              )
             : null,
           ended || running
             ? h(
                 'div',
                 { class: 'group' },
                 h('h3', {}, 'How did it go?'),
+                running && h('p', { class: 'sub small' }, 'Answering now finishes the block early, and starts anything chained after it.'),
                 h(
                   'div',
                   { class: 'seg-buttons' },
@@ -392,6 +427,7 @@ function renderRoutine(): HTMLElement {
               'span',
               { class: 'ri-meta' },
               daysLabel(b.days),
+              b.after ? ` · ${anchorLabel(getState(), b)}` : '',
               b.optional ? ' · optional' : '',
               b.steps.length ? ` · ${b.steps.length} steps` : '',
             ),
@@ -484,6 +520,7 @@ function renderBlockEditor(draft: Block): HTMLElement {
       field('End', timeInput(draft.end, (v) => ((draft.end = v), showDuration()))),
       durationEl,
     ),
+    renderStartsWhen(draft),
     field('Colour', swatches(draft.color, (c) => ((draft.color = c), render()))),
     h(
       'div',
@@ -549,6 +586,44 @@ function renderBlockEditor(draft: Block): HTMLElement {
           'Delete',
         ),
     ),
+  );
+}
+
+/**
+ * A chained block starts when something happens rather than at a time. Its
+ * start and end above stay as the planned slot and set how long it runs.
+ */
+function renderStartsWhen(draft: Block): HTMLElement {
+  const { routine, events } = getState();
+  const others = routine.filter((b) => b.id !== draft.id).sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+  const value = draft.after ? `${draft.after.kind}:${draft.after.id}` : '';
+  const select = h(
+    'select',
+    {
+      onChange: (e: Event) => {
+        const [kind, id] = (e.target as HTMLSelectElement).value.split(':');
+        draft.after = kind ? ({ kind, id } as Anchor) : null;
+        render();
+      },
+    },
+    h('option', { value: '', selected: !draft.after }, 'At its start time'),
+    others.length > 0 &&
+      h('optgroup', { label: 'After a block is done' }, others.map((b) => h('option', { value: `block:${b.id}`, selected: value === `block:${b.id}` }, `After ${b.name} (${b.start}–${b.end})`))),
+    events.length > 0 && h('optgroup', { label: 'After one of your events' }, events.map((e) => h('option', { value: `event:${e.id}`, selected: value === `event:${e.id}` }, `After ${e.name}`))),
+  );
+  return h(
+    'div',
+    { class: 'field' },
+    h('span', {}, 'Starts'),
+    select,
+    draft.after
+      ? h(
+          'div',
+          { class: 'row' },
+          h('p', { class: 'sub small grow' }, 'It keeps its start and end above as its planned slot, and runs for that long from whenever it starts. Leave “latest” empty to wait as long as it takes.'),
+          field('Latest', h('input', { type: 'time', value: draft.latestStart ?? '', onChange: (e: Event) => (draft.latestStart = (e.target as HTMLInputElement).value || null) })),
+        )
+      : events.length === 0 && h('p', { class: 'sub small' }, 'Add your own events (“Ate lunch”) in Settings to chain blocks to them.'),
   );
 }
 
@@ -662,6 +737,42 @@ function renderSettings(): HTMLElement {
         h('div', {}, h('h3', {}, 'Ask for an intention'), h('p', { class: 'sub' }, 'When a block starts, the widget asks what you want to get done. You can always say “not now”.')),
         h('input', { type: 'checkbox', checked: settings.askIntention, onChange: (e: Event) => update((d) => void (d.settings.askIntention = (e.target as HTMLInputElement).checked)) }),
       ),
+      renderEventsSetting(),
+      h(
+        'div',
+        { class: 'setting stacked' },
+        h(
+          'div',
+          {},
+          h('h3', {}, 'Return ritual'),
+          h('p', { class: 'sub' }, `Check out when you step away and check in when you’re back (widget, tray, or ${CHECK_HOTKEY}). Checking in walks you through these steps, one per line, before you pick up where you left off.`),
+        ),
+        h('textarea', {
+          rows: '6',
+          value: settings.ritualSteps.join('\n'),
+          onChange: (e: Event) => {
+            const steps = (e.target as HTMLTextAreaElement).value.split('\n').map((s) => s.trim()).filter(Boolean);
+            void update((d) => void (d.settings.ritualSteps = steps));
+          },
+        }),
+      ),
+      h(
+        'div',
+        { class: 'setting stacked' },
+        h(
+          'div',
+          {},
+          h('h3', {}, 'Task list for “I’m stuck”'),
+          h('p', { class: 'sub' }, 'A Markdown file. Whatever is listed under a “To do” or “In progress” heading is offered when you press I’m stuck. It’s read fresh each time, so edit it as usual.'),
+        ),
+        settings.taskFile ? h('p', { class: 'path' }, settings.taskFile) : h('p', { class: 'sub small' }, 'No file chosen yet.'),
+        h(
+          'div',
+          { class: 'row' },
+          h('button', { class: 'btn small', disabled: !inTauri, onClick: chooseTaskFile }, settings.taskFile ? 'Choose another file' : 'Choose a .md file'),
+          settings.taskFile && h('button', { class: 'btn ghost small', onClick: () => update((d) => void (d.settings.taskFile = null)) }, 'Forget it'),
+        ),
+      ),
       h(
         'div',
         { class: 'setting' },
@@ -675,6 +786,68 @@ function renderSettings(): HTMLElement {
         h('button', { class: 'btn ghost small', onClick: () => update((d) => void ((d.settings.widgetPos = null), (d.settings.dockX = null))) }, 'Reset'),
       ),
     ),
+  );
+}
+
+/** The shell's hotkey for checking out and back in; fixed in src-tauri/src/lib.rs. */
+const CHECK_HOTKEY = 'Ctrl+Alt+C';
+
+async function chooseTaskFile() {
+  const path = await openDialog({ multiple: false, directory: false, filters: [{ name: 'Markdown', extensions: ['md', 'markdown'] }] });
+  if (typeof path === 'string') await update((d) => void (d.settings.taskFile = path));
+}
+
+/** Hotkeys the shell couldn't register (taken by another app, or misspelt), by event id. */
+let hotkeyErrors: Record<string, string> = {};
+
+/** Hand the events to the shell, which rebuilds the tray menu and registers their hotkeys. */
+async function syncEvents() {
+  if (!inTauri) return;
+  hotkeyErrors = await invoke<Record<string, string>>('set_events', { events: getState().events }).catch((e) => ({ '': String(e) }));
+  render();
+}
+
+function editEvents(change: (events: EventDef[]) => void) {
+  void update((d) => change(d.events)).then(syncEvents);
+}
+
+/** Your own events: things you mark as they happen, which chained blocks can start after. */
+function renderEventsSetting(): HTMLElement {
+  const { events } = getState();
+  return h(
+    'div',
+    { class: 'setting stacked' },
+    h(
+      'div',
+      {},
+      h('h3', {}, 'Your events'),
+      h(
+        'p',
+        { class: 'sub' },
+        'Moments you mark as they happen: “Ate lunch”, “Back from gym”, “Kids in bed”. Mark them from the tray menu or a hotkey; a block can start after one (Routine → Starts). Hotkeys look like Ctrl+Alt+L.',
+      ),
+    ),
+    events.map((e) =>
+      h(
+        'div',
+        {},
+        h(
+          'div',
+          { class: 'event-row' },
+          h('input', { value: e.name, placeholder: 'Ate lunch', onChange: (ev: Event) => editEvents((list) => void (list.find((x) => x.id === e.id)!.name = (ev.target as HTMLInputElement).value.trim() || e.name)) }),
+          h('input', {
+            class: 'hotkey',
+            value: e.hotkey,
+            placeholder: 'Hotkey (optional)',
+            onChange: (ev: Event) => editEvents((list) => void (list.find((x) => x.id === e.id)!.hotkey = (ev.target as HTMLInputElement).value.trim())),
+          }),
+          h('button', { class: 'icon', title: 'Remove event', onClick: () => editEvents((list) => void list.splice(list.findIndex((x) => x.id === e.id), 1)) }, '×'),
+        ),
+        hotkeyErrors[e.id] && h('p', { class: 'error small' }, hotkeyErrors[e.id]),
+      ),
+    ),
+    hotkeyErrors[''] && h('p', { class: 'error small' }, hotkeyErrors['']),
+    h('button', { class: 'btn ghost small', onClick: () => editEvents((list) => void list.push({ id: newId(), name: `Event ${list.length + 1}`, hotkey: '' })) }, '+ Add event'),
   );
 }
 

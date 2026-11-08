@@ -278,7 +278,26 @@ input:not([type='checkbox']) {
   font: inherit;
   min-width: 0;
 }
+select,
+textarea {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  min-width: 0;
+}
+textarea {
+  resize: vertical;
+  line-height: 1.5;
+}
+.grow {
+  flex: 1;
+}
 input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
 button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 1px;
@@ -827,4 +846,71 @@ kbd {
 .hour-chip.now {
   outline: 2px solid var(--accent);
   font-weight: 700;
+}
+
+/* ── Chains and events on the timeline ── */
+/* A chained block still waiting for its anchor: an estimate, not a fixed time */
+.tl-block.waiting {
+  border-left-style: dashed;
+  background: repeating-linear-gradient(
+    -45deg,
+    color-mix(in srgb, var(--c) 14%, var(--surface)) 0 8px,
+    color-mix(in srgb, var(--c) 8%, var(--surface)) 8px 16px
+  );
+}
+/* Where a chained block was planned, behind where it actually ran */
+.tl-ghost {
+  position: absolute;
+  left: 64px;
+  right: 0;
+  padding: 3px 10px;
+  border: 1.5px dashed color-mix(in srgb, var(--c) 55%, transparent);
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 11.5px;
+  pointer-events: none;
+}
+.tl-ghost span {
+  float: right;
+}
+.tl-event {
+  position: absolute;
+  left: 56px;
+  right: 0;
+  border-top: 1.5px dotted var(--accent);
+  pointer-events: none;
+}
+.tl-event span {
+  position: absolute;
+  right: 6px;
+  top: -9px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.page-head .row.push {
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* ── Settings: events, ritual, task list ── */
+.event-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.event-row input:first-child {
+  flex: 1;
+}
+.event-row input.hotkey {
+  width: 150px;
+}
+.path {
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 12px;
+  word-break: break-all;
 }

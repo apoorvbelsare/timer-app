@@ -7,12 +7,20 @@ export function ensureDay(draft: AppState, key: string): DayRecord {
   return (draft.days[key] ??= emptyDay());
 }
 
-/** Log how a block went, with an optional one-line note. */
+/**
+ * Log how a block went, with an optional one-line note. The first answer also
+ * marks when it finished: a running block ends there, and anything chained after it starts.
+ */
 export function logBlock(key: string, id: string, status: BlockStatus | null, note?: string) {
   return update((d) => {
     const day = ensureDay(d, key);
-    if (status) day.log[id] = status;
-    else delete day.log[id];
+    if (status) {
+      day.log[id] = status;
+      day.finishedAt[id] ??= Date.now();
+    } else {
+      delete day.log[id];
+      delete day.finishedAt[id];
+    }
     if (note?.trim()) day.notes[id] = note.trim();
   });
 }
@@ -75,6 +83,7 @@ export function skipToday(key: string, id: string) {
     const day = ensureDay(d, key);
     if (!day.override.skip.includes(id)) day.override.skip.push(id);
     day.log[id] = 'skipped';
+    day.finishedAt[id] ??= Date.now();
   });
 }
 
@@ -82,8 +91,33 @@ export function restoreToday(key: string, id: string) {
   return update((d) => {
     const day = ensureDay(d, key);
     day.override.skip = day.override.skip.filter((s) => s !== id);
-    if (day.log[id] === 'skipped') delete day.log[id];
+    if (day.log[id] === 'skipped') {
+      delete day.log[id];
+      delete day.finishedAt[id];
+    }
   });
+}
+
+// ── Events and checking out ──────────────────────────────────────────────────
+
+/** Mark that one of your events just happened ("Ate lunch"). */
+export function fireEvent(key: string, id: string) {
+  return update((d) => void (ensureDay(d, key).events[id] ??= []).push(Date.now()));
+}
+
+export function checkOut() {
+  return update((d) => void (d.away = { since: Date.now(), back: null }));
+}
+
+/** Back at the PC: the return ritual runs until it's finished. */
+export function checkIn() {
+  return update((d) => {
+    if (d.away) d.away.back = Date.now();
+  });
+}
+
+export function finishReturn() {
+  return update((d) => void (d.away = null));
 }
 
 export function snooze(key: string, id: string) {

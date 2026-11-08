@@ -1,13 +1,17 @@
 use std::{
+    collections::HashMap,
     fs,
     path::PathBuf,
-    sync::atomic::{AtomicBool, Ordering},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
 };
 
 use tauri::{
-    menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
+    menu::{CheckMenuItem, IsMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, WindowEvent,
+    AppHandle, Emitter, Manager, WindowEvent, Wry,
 };
 use tauri_plugin_autostart::MacosLauncher;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
@@ -156,6 +160,114 @@ fn toggle_widget(app: &AppHandle) {
     }
 }
 
+/// Checking out and back in, from anywhere.
+fn check_shortcut() -> Shortcut {
+    Shortcut::new(Some(Modifiers::CONTROL | Modifiers::ALT), Code::KeyC)
+}
+
+/// The tray menu's fixed items, kept so the menu can be rebuilt around the events.
+struct TrayItems {
+    planner: MenuItem<Wry>,
+    focus: MenuItem<Wry>,
+    park: MenuItem<Wry>,
+    check: MenuItem<Wry>,
+    stuck: MenuItem<Wry>,
+    widget: MenuItem<Wry>,
+    dock: CheckMenuItem<Wry>,
+    lock: CheckMenuItem<Wry>,
+    quit: MenuItem<Wry>,
+}
+
+/// Your events' hotkeys and which event each one marks.
+struct EventKeys(Mutex<Vec<(Shortcut, String)>>);
+
+#[derive(serde::Deserialize)]
+struct EventDef {
+    id: String,
+    name: String,
+    hotkey: String,
+}
+
+fn build_menu(app: &AppHandle, items: &TrayItems, events: &[EventDef]) -> tauri::Result<Menu<Wry>> {
+    let separator = || PredefinedMenuItem::separator(app);
+    let event_items = events
+        .iter()
+        .map(|e| {
+            let label = if e.hotkey.is_empty() { e.name.clone() } else { format!("{}\t{}", e.name, e.hotkey) };
+            MenuItem::with_id(app, format!("event:{}", e.id), label, true, None::<&str>)
+        })
+        .collect::<tauri::Result<Vec<_>>>()?;
+    let event_refs: Vec<&dyn IsMenuItem<Wry>> = event_items.iter().map(|i| i as &dyn IsMenuItem<Wry>).collect();
+    let marks = Submenu::with_items(app, "Mark an event", !events.is_empty(), &event_refs)?;
+    Menu::with_items(
+        app,
+        &[
+            &items.planner,
+            &items.focus,
+            &items.park,
+            &separator()?,
+            &items.check,
+            &items.stuck,
+            &marks,
+            &separator()?,
+            &items.widget,
+            &items.dock,
+            &items.lock,
+            &separator()?,
+            &items.quit,
+        ],
+    )
+}
+
+/// The planner hands over your events whenever they change, and the widget on launch.
+/// Rebuilds the tray's "Mark an event" menu and registers the hotkeys; returns, by
+/// event id, any hotkey that couldn't be used.
+#[tauri::command]
+fn set_events(app: AppHandle, events: Vec<EventDef>) -> Result<HashMap<String, String>, String> {
+    let mut errors = HashMap::new();
+    let shortcuts = app.global_shortcut();
+    let keys = app.state::<EventKeys>();
+    let mut keys = keys.0.lock().unwrap();
+    for (shortcut, _) in keys.drain(..) {
+        let _ = shortcuts.unregister(shortcut);
+    }
+    for e in events.iter().filter(|e| !e.hotkey.is_empty()) {
+        match e.hotkey.parse::<Shortcut>() {
+            Ok(shortcut) if keys.iter().any(|(k, _)| *k == shortcut) => {
+                errors.insert(e.id.clone(), format!("{} is already used by another event.", e.hotkey));
+            }
+            Ok(shortcut) => match shortcuts.register(shortcut) {
+                Ok(()) => keys.push((shortcut, e.id.clone())),
+                Err(err) => {
+                    errors.insert(e.id.clone(), format!("Couldn’t use {}: {err}", e.hotkey));
+                }
+            },
+            Err(_) => {
+                errors.insert(e.id.clone(), format!("“{}” isn’t a hotkey. Try something like Ctrl+Alt+L.", e.hotkey));
+            }
+        }
+    }
+    let menu = build_menu(&app, &app.state::<TrayItems>(), &events).map_err(|e| e.to_string())?;
+    if let Some(tray) = app.tray_by_id("main") {
+        tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
+    }
+    Ok(errors)
+}
+
+/// The "I'm stuck" task list. Only Markdown files, and only the one you picked in Settings.
+#[tauri::command]
+fn read_task_file(path: String) -> Result<String, String> {
+    let path = PathBuf::from(path);
+    let markdown = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .is_some_and(|e| e.eq_ignore_ascii_case("md") || e.eq_ignore_ascii_case("markdown"));
+    if !markdown {
+        return Err("The task list needs to be a .md file.".into());
+    }
+    fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -164,39 +276,57 @@ pub fn run() {
             show_planner(app)
         }))
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
-                    if event.state() == ShortcutState::Pressed
-                        && shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::Space)
-                    {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::Space) {
                         show_capture(app);
+                    } else if *shortcut == check_shortcut() {
+                        let _ = app.emit_to("widget", "check-toggle", ());
+                    } else if let Some(id) = app
+                        .state::<EventKeys>()
+                        .0
+                        .lock()
+                        .unwrap()
+                        .iter()
+                        .find(|(key, _)| key == shortcut)
+                        .map(|(_, id)| id.clone())
+                    {
+                        let _ = app.emit_to("widget", "fire-event", id);
                     }
                 })
                 .build(),
         )
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
-        .invoke_handler(tauri::generate_handler![load_state, save_state, set_docked])
+        .invoke_handler(tauri::generate_handler![
+            load_state,
+            save_state,
+            set_docked,
+            set_events,
+            read_task_file
+        ])
         .setup(|app| {
-            let planner = MenuItem::with_id(app, "planner", "Open planner", true, None::<&str>)?;
-            let focus = MenuItem::with_id(app, "focus", "Focus mode", true, None::<&str>)?;
-            let park = MenuItem::with_id(app, "park", "Park a thought…	Ctrl+Shift+Space", true, None::<&str>)?;
-            let widget = MenuItem::with_id(app, "widget", "Show / hide widget", true, None::<&str>)?;
-            let dock = CheckMenuItem::with_id(app, "dock", "Dock to taskbar", true, false, None::<&str>)?;
-            app.manage(DockItem(dock.clone()));
-            let lock = CheckMenuItem::with_id(
-                app,
-                "lock",
-                "Lock widget (click-through)",
-                true,
-                false,
-                None::<&str>,
-            )?;
-            let separator = PredefinedMenuItem::separator(app)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&planner, &focus, &park, &widget, &dock, &lock, &separator, &quit])?;
+            let items = TrayItems {
+                planner: MenuItem::with_id(app, "planner", "Open planner", true, None::<&str>)?,
+                focus: MenuItem::with_id(app, "focus", "Focus mode", true, None::<&str>)?,
+                park: MenuItem::with_id(app, "park", "Park a thought…	Ctrl+Shift+Space", true, None::<&str>)?,
+                check: MenuItem::with_id(app, "check", "Check out / in	Ctrl+Alt+C", true, None::<&str>)?,
+                stuck: MenuItem::with_id(app, "stuck", "I’m stuck…", true, None::<&str>)?,
+                widget: MenuItem::with_id(app, "widget", "Show / hide widget", true, None::<&str>)?,
+                dock: CheckMenuItem::with_id(app, "dock", "Dock to taskbar", true, false, None::<&str>)?,
+                lock: CheckMenuItem::with_id(app, "lock", "Lock widget (click-through)", true, false, None::<&str>)?,
+                quit: MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
+            };
+            app.manage(DockItem(items.dock.clone()));
+            let menu = build_menu(app.handle(), &items, &[])?;
+            let lock_item = items.lock.clone();
+            app.manage(items);
+            app.manage(EventKeys(Mutex::new(Vec::new())));
 
-            let lock_item = lock.clone();
             TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Timer")
@@ -206,6 +336,12 @@ pub fn run() {
                     "planner" => show_planner(app),
                     "focus" => show_focus(app),
                     "park" => show_capture(app),
+                    "check" => {
+                        let _ = app.emit_to("widget", "check-toggle", ());
+                    }
+                    "stuck" => {
+                        let _ = app.emit_to("widget", "stuck", ());
+                    }
                     "widget" => toggle_widget(app),
                     // The widget owns the mode; it switches and reports back to set the tick
                     "dock" => {
@@ -218,7 +354,11 @@ pub fn run() {
                         }
                     }
                     "quit" => app.exit(0),
-                    _ => {}
+                    id => {
+                        if let Some(event_id) = id.strip_prefix("event:") {
+                            let _ = app.emit_to("widget", "fire-event", event_id.to_string());
+                        }
+                    }
                 })
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
@@ -232,10 +372,12 @@ pub fn run() {
                 })
                 .build(app)?;
 
-            // Another app may already own the shortcut; the tray item still works then
+            // Another app may already own a shortcut; the tray items still work then
             let capture = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space);
-            if let Err(err) = app.global_shortcut().register(capture) {
-                eprintln!("Couldn't register Ctrl+Shift+Space: {err}");
+            for (shortcut, label) in [(capture, "Ctrl+Shift+Space"), (check_shortcut(), "Ctrl+Alt+C")] {
+                if let Err(err) = app.global_shortcut().register(shortcut) {
+                    eprintln!("Couldn't register {label}: {err}");
+                }
             }
             #[cfg(windows)]
             keep_dock_on_top(app.handle().clone());

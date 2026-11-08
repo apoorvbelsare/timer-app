@@ -1,6 +1,6 @@
 [package]
 name = "timer-app"
-version = "0.5.0"
+version = "0.6.0"
 description = "A visual routine timer built for ADHD brains"
 edition = "2021"
 
@@ -17,6 +17,8 @@ tauri-plugin-notification = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-single-instance = "2"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-dialog = "2"
+serde = { version = "1", features = ["derive"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }

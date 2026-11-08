@@ -463,6 +463,78 @@ button:focus-visible {
   animation: none;
 }
 
+/* ── Corner buttons: on hover over the card, always on the bar ── */
+.icon-btn[hidden] {
+  display: none;
+}
+.widget:not(.docked) .corner {
+  padding: 2px;
+  border-radius: 10px;
+  background: var(--bg);
+}
+
+/* ── Return ritual and the "I'm stuck" picker ── */
+.prompt .muted {
+  color: var(--muted);
+}
+.ritual {
+  margin: 0 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 12.5px;
+}
+.ritual label {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 3px 0;
+  cursor: pointer;
+}
+.ritual input {
+  width: auto;
+  margin: 2px 0 0;
+  accent-color: var(--sage);
+}
+.ritual input:checked + span {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.prompt .where {
+  padding: 8px 10px;
+  border-radius: 10px;
+  background: rgba(246, 241, 231, 0.06);
+  font-size: 12.5px;
+}
+.task-pick {
+  max-height: 180px;
+  margin: 0 0 8px;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+}
+.task-pick button {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.task-pick button:hover {
+  background: rgba(246, 241, 231, 0.09);
+}
+.task-pick .muted {
+  flex: none;
+  font-size: 11px;
+}
+
 /* ── Zone colour: during a block, a deep shade of its colour replaces the forest ── */
 .widget.zoned {
   --bg: color-mix(in oklab, var(--zone) 34%, rgb(10 16 15 / 0.95));

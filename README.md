@@ -6,7 +6,7 @@ Timer sits in the empty middle of your taskbar, or in a corner of your screen, a
 
 Everything stays on your PC. There's no account, no cloud and no tracking.
 
-> **`main` has the latest version of Timer (v0.5.0, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
+> **`main` has the latest version of Timer (v0.6.0, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
 
 ---
 
@@ -42,6 +42,14 @@ Many people with ADHD struggle to sense time passing (often called *time blindne
 - **Optional blocks:** for things you don't do every day. Instead of starting on their own, they ask "Start or skip?", and skipping costs nothing.
 - **Overlapping blocks:** blocks can share the same time. The one that started most recently is shown in front, and the widget lists the others as "Also on". A 10:00 call inside a 9–12 Deep work block takes over for its half hour, then Deep work comes back. On the Today page, overlapping blocks sit side by side.
 - **Just for today:** skip, move or add a one-off block for today only. Your usual routine stays as it is.
+
+### Anchors, not just clocks
+Time blindness makes "at 09:00" hard to act on; "after breakfast" is much easier. So blocks can hang off things that happen.
+- **Chained blocks:** a block can start **after another block is done**, or **after one of your events**, instead of at a clock time (Routine → Starts). It keeps its planned slot on the Today page and runs for that long from whenever it actually starts. If it moves, the Today page shows where it ran in solid colour, with the planned slot as a dashed outline behind it, and the widget says "planned 09:00". You can give it a **latest start** so it begins anyway if the anchor never comes.
+- **Finish early:** the ✓ on the widget ends the current block now and starts whatever is chained after it.
+- **Your events:** moments you mark as they happen, like "Ate lunch", "Back from gym" or "Kids in bed" (Settings → Your events). Mark them from the tray's **Mark an event** menu, your own hotkey, or the buttons on the Today page. Each one shows on the Today timeline at the time you marked it.
+- **Check out / check in:** tell Timer when you step away (widget door icon, tray, or **Ctrl + Alt + C**). While you're out, reminders pause. When you check back in, a **return ritual** walks you through your steps (editable in Settings), then shows where you left off, with **Resume**, **Switch** or **I'm stuck**.
+- **I'm stuck:** the **?** on the widget (or the tray) opens a picker of tasks from your own Markdown task list: everything under a **To do** or **In progress** heading (Settings → Task list). Pick one and it gives you five minutes to just start it, then asks whether to keep going (it becomes the block's intention) or pick another.
 
 ### Stay on track
 - **Warnings** with a soft chime and a notification before a block ends, or before the next one starts during free time.
@@ -93,7 +101,7 @@ If a `Timer_x.y.z_x64-setup.exe` is attached to the [Releases](https://github.co
    ```
 
 3. Run the installer it creates:
-   `src-tauri\target\release\bundle\nsis\Timer_0.5.0_x64-setup.exe`
+   `src-tauri\target\release\bundle\nsis\Timer_0.6.0_x64-setup.exe`
 
 After installing, **Timer** is in your Start menu, and it **starts with Windows** from the first launch. You can turn that off in Settings. To uninstall: **Windows Settings → Apps → Timer**.
 
@@ -132,6 +140,10 @@ Build or download the newer installer and run it over the old one. Your routine 
 | Action | How |
 | --- | --- |
 | Park a thought from anywhere | **Ctrl + Shift + Space** |
+| Check out / check back in | **Ctrl + Alt + C**, the door icon on the widget, or the tray |
+| Mark one of your events | Its hotkey (set in Settings), tray → **Mark an event**, or the Today page |
+| I'm stuck | **?** on the widget, or the tray |
+| Finish the current block now | **✓** on the widget |
 | Open the planner | Double-click the widget, or left-click the tray icon |
 | Focus mode | Leaf icon on the widget (hover), the tray menu, or the planner sidebar |
 | Full screen in focus mode | **F11** |
@@ -155,7 +167,7 @@ Closing a window only hides it; Timer keeps running in the tray. Use **Quit** in
 | Rendering | SVG (rings, garden, hills) and Canvas (the bird flock) | Sharp at any size, animated with almost no CPU. |
 | Sound | Web Audio API | Every chime, hourly tune and ambient sound (rain, forest, brown noise) is generated in code, so the app ships no audio files. |
 | Fonts | [Fraunces](https://fonts.google.com/specimen/Fraunces) and [Nunito](https://fonts.google.com/specimen/Nunito), bundled through Fontsource | They work offline. |
-| Tauri plugins | notification, autostart, single-instance, global-shortcut | Toasts, start with Windows, one copy at a time, Ctrl+Shift+Space |
+| Tauri plugins | notification, autostart, single-instance, global-shortcut, dialog | Toasts, start with Windows, one copy at a time, hotkeys, picking the task-list file |
 | Tests | [Vitest](https://vitest.dev) | The scheduling engine, garden growth and hourly tunes are plain functions with unit tests. |
 | Installer | NSIS (through `tauri build`) | A per-user `.exe` installer, no admin needed. |
 
@@ -209,7 +221,7 @@ npm run tauri build   # build the Windows installer
 
 | Branch | What it is |
 | --- | --- |
-| `main` | **Use this one: the latest version (v0.5.0, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
+| `main` | **Use this one: the latest version (v0.6.0, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
 | `feat/taskbar-dock` | Where the taskbar dock was built; the same as `main` |
 | `feat/garden-parking-lot` | v0.3.0: Flown style plus the garden, parking lot and hourly ping |
 | `feat/flown-style` | The Flown-inspired version without those three additions |

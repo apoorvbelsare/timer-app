@@ -5,21 +5,22 @@ import { invoke } from '@tauri-apps/api/core';
 import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Window, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
-import { dismissIntention, logBlock, setIntention, skipToday, snooze, startBlock } from './actions';
+import { checkIn, checkOut, dismissIntention, finishReturn, fireEvent, logBlock, setIntention, skipToday, snooze, startBlock } from './actions';
 import { chime, notify, playTune, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
-import { type Snapshot, dayRecord, escalation, snapshot } from './engine';
+import { type Planned, type Prompt, type Snapshot, anchorLabel, dayRecord, escalation, shifted, snapshot } from './engine';
 import { type Garden, garden, growthNews } from './garden';
 import { hourLabel, hourTune, inQuietHours } from './hourly';
 import type { FocusMode } from './focus';
-import { formatDuration, minuteOfDay } from './model';
+import { dayKey, formatClock, formatDuration, minuteOfDay } from './model';
+import { type Task, parseTasks } from './tasks';
 import { CIRCUMFERENCE, ringColor, ringRemaining, ringText } from './ring';
 import { getState, inTauri, initStore, subscribe, update, wasFirstRun } from './store';
 import './styles/widget.css';
 
 const WIDTH = 320;
 /** Tallest the widget gets: with the intention or review card open */
-const MAX_HEIGHT = 260;
+const MAX_HEIGHT = 400;
 /** The docked bar: wide enough for everything the card shows, on one line */
 const DOCK_WIDTH = 800;
 
@@ -31,7 +32,7 @@ const extrasEl = $('extras');
 
 const win = inTauri ? getCurrentWindow() : null;
 
-async function openPlanner(view?: 'garden' | 'parking') {
+async function openPlanner(view?: 'garden' | 'parking' | 'settings') {
   if (!inTauri) {
     window.open(`/planner.html${view ? `#${view}` : ''}`, 'planner');
     return;
@@ -67,7 +68,9 @@ function render(s: Snapshot) {
   app.classList.toggle('zoned', !!s.current);
   if (s.current) app.style.setProperty('--zone', s.current.color);
 
-  const [value, unit] = s.current || s.next ? ringText(s.remainingMs) : ['✓', ''];
+  // Waiting on a chained block: there's no clock to count down to
+  const waitingNext = !s.current && s.next?.waiting;
+  const [value, unit] = waitingNext ? ['…', ''] : s.current || s.next ? ringText(s.remainingMs) : ['✓', ''];
   $('ring-value').textContent = value;
   $('ring-unit').textContent = unit;
 
@@ -76,31 +79,40 @@ function render(s: Snapshot) {
   const nextLine = under
     ? `Also on · ${s.alsoRunning.map((p) => p.name).join(', ')} until ${under.end}`
     : s.next
-      ? `Next · ${s.next.name} ${s.next.start}`
+      ? `Next · ${s.next.name} ${s.next.waiting ? anchorLabel(state, s.next) : s.next.start}`
       : '';
-  if (state.routine.length === 0 && s.plan.length === 0) {
+  const planned = (p: Planned) => (shifted(p) ? ` · planned ${p.planStart}` : '');
+  if (state.away && !state.away.back) {
+    setText('Away', '', `Checked out at ${formatClock(state.away.since)}`, s.current ? `${s.current.name} carries on until ${s.current.end}` : nextLine);
+  } else if (state.routine.length === 0 && s.plan.length === 0) {
     setText('No routine yet', '', 'Open the planner to build your day', '');
     $('ring-value').textContent = '+';
   } else if (s.current && s.awaitingStart) {
     setText(s.current.name, 'Optional · start when you’re ready', `until ${s.current.end}`, nextLine);
   } else if (s.current) {
-    // A running step wins; otherwise remind them what they meant to do
+    // "Just start" from I'm stuck wins, then a running step, then what they meant to do
     const intention = dayRecord(state, s.key).intentions[s.current.id]?.text;
-    const step = s.step
-      ? `${s.step.step.name} · ${formatDuration(s.step.remainingMs)} (${s.step.index + 1}/${s.current.steps.length})`
-      : intention
-        ? `→ ${intention}`
-        : '';
-    setText(s.current.name, step, `${formatDuration(s.remainingMs)} left · until ${s.current.end}`, nextLine);
+    const step =
+      stuck?.phase === 'go'
+        ? `Just start → ${stuck.task} · ${formatDuration(stuck.until - s.now)}`
+        : s.step
+          ? `${s.step.step.name} · ${formatDuration(s.step.remainingMs)} (${s.step.index + 1}/${s.current.steps.length})`
+          : intention
+            ? `→ ${intention}`
+            : '';
+    setText(s.current.name, step, `${formatDuration(s.remainingMs)} left · until ${s.current.end}${planned(s.current)}`, nextLine);
   } else if (s.next) {
-    setText('Free time', '', `until ${s.next.start}`, nextLine);
+    const step = stuck?.phase === 'go' ? `Just start → ${stuck.task} · ${formatDuration(stuck.until - s.now)}` : '';
+    setText('Free time', step, waitingNext ? `${s.next.name} starts ${anchorLabel(state, s.next)}` : `until ${s.next.start}`, nextLine);
   } else {
     setText('Done for today', '', 'Nothing else planned', '');
   }
+  $('finish-block').hidden = !s.current || s.awaitingStart || !!state.away;
+  $('check-out').title = $('check-out').ariaLabel = state.away ? 'Check in' : 'Check out';
 
   renderStrip(s);
   renderExtras(s);
-  renderPrompt(s);
+  renderCard(s);
 }
 
 function setText(title: string, step: string, until: string, next: string) {
@@ -192,16 +204,174 @@ function renderExtras(s: Snapshot) {
   extrasEl.replaceChildren(...content.filter((c): c is HTMLElement => !!c));
 }
 
-let promptKey = '';
+// ── The card ─────────────────────────────────────────────────────────────────
 
-function renderPrompt(s: Snapshot) {
-  const p = s.prompt;
-  const key = p ? `${s.key}:${p.kind}:${p.block.id}` : '';
-  if (key === promptKey) return;
-  promptKey = key;
-  promptEl.hidden = !p;
-  if (!p) return promptEl.replaceChildren();
+/** "I'm stuck": pick a task, give it five minutes, then decide. Lives in this window only. */
+type Stuck =
+  | { phase: 'pick'; tasks: Task[] | null; error: string }
+  | { phase: 'go'; task: string; until: number }
+  | { phase: 'check'; task: string };
+let stuck: Stuck | null = null;
+const JUST_START_MS = 5 * 60_000;
 
+/** A block being finished before its end, from the ✓ button. */
+let finishing: string | null = null;
+/** When the return ritual last closed; the hyperfocus guard holds off for a bit after */
+let returnedAt = 0;
+
+let cardKey = '';
+
+/**
+ * One card under the widget (above the bar when docked), most pressing first:
+ * coming back, being away, being stuck, finishing early, then the block prompts.
+ */
+function renderCard(s: Snapshot) {
+  const { away } = getState();
+  const finishBlock = finishing ? s.plan.find((p) => p.id === finishing && !dayRecord(getState(), s.key).log[p.id]) : undefined;
+  if (finishing && !finishBlock) finishing = null;
+  const key = away
+    ? `away:${away.since}:${away.back ?? ''}`
+    : stuck && stuck.phase !== 'go'
+      ? `stuck:${stuck.phase}:${stuck.phase === 'pick' ? `${stuck.tasks?.length}:${stuck.error}` : stuck.task}`
+      : finishBlock
+        ? `finish:${finishBlock.id}`
+        : s.prompt
+          ? `${s.key}:${s.prompt.kind}:${s.prompt.block.id}`
+          : '';
+  if (key === cardKey) return;
+  cardKey = key;
+  promptEl.hidden = !key;
+  if (!key) return promptEl.replaceChildren();
+  if (away) return fill(away.back ? ritualCard(s) : awayCard(away.since));
+  if (stuck && stuck.phase !== 'go') return fill(stuckCard(stuck));
+  if (finishBlock) return fill(reviewCard(s.key, finishBlock, 'finish'));
+  renderPrompt(s, s.prompt!);
+}
+
+type Part = Node | string | false | null | undefined;
+const fill = (parts: Part[]) => promptEl.replaceChildren(...parts.filter((p): p is Node | string => !!p));
+
+function awayCard(since: number) {
+  return [
+    h('p', {}, 'Checked out at ', h('strong', {}, formatClock(since)), '. Reminders are paused.'),
+    h('div', { class: 'actions' }, h('button', { class: 'primary', onClick: () => checkIn() }, 'Check in')),
+  ];
+}
+
+/** Back at the PC: your steps, then where you left off. */
+function ritualCard(s: Snapshot) {
+  const { away, settings } = getState();
+  const intention = s.current && dayRecord(getState(), s.key).intentions[s.current.id]?.text;
+  const where = s.current
+    ? [h('strong', {}, s.current.name), ` · ${formatDuration(s.remainingMs)} left, until ${s.current.end}`, intention ? h('span', { class: 'muted' }, ` · → ${intention}`) : '']
+    : s.next
+      ? ['Free time. Next: ', h('strong', {}, s.next.name), ` ${s.next.waiting ? anchorLabel(getState(), s.next) : `at ${s.next.start}`}`]
+      : ['Nothing else planned today.'];
+  const resume = () => {
+    returnedAt = Date.now();
+    return finishReturn();
+  };
+  return [
+    h('p', {}, 'Welcome back', away?.back ? ` · away ${formatDuration(away.back - away.since)}` : '', '.'),
+    settings.ritualSteps.length > 0 &&
+      h('ol', { class: 'ritual' }, settings.ritualSteps.map((step) => h('li', {}, h('label', {}, h('input', { type: 'checkbox' }), h('span', {}, step))))),
+    h('p', { class: 'where' }, ...where),
+    h(
+      'div',
+      { class: 'actions' },
+      h('button', { class: 'primary', onClick: resume }, 'Resume'),
+      h('button', { onClick: () => void resume().then(() => openPlanner()) }, 'Switch'),
+      h('button', { onClick: () => void resume().then(openStuck) }, 'I’m stuck'),
+    ),
+  ];
+}
+
+async function openStuck() {
+  stuck = { phase: 'pick', tasks: null, error: '' };
+  tick();
+  const path = getState().settings.taskFile;
+  if (!path) stuck = { phase: 'pick', tasks: [], error: 'Choose your task list file in Settings first.' };
+  else {
+    try {
+      const tasks = parseTasks(inTauri ? await invoke<string>('read_task_file', { path }) : '');
+      stuck = { phase: 'pick', tasks, error: tasks.length ? '' : 'Nothing under “To do” or “In progress” in your task list.' };
+    } catch (e) {
+      stuck = { phase: 'pick', tasks: [], error: `Couldn’t read your task list: ${String(e)}` };
+    }
+  }
+  tick();
+}
+
+function startTask(task: string) {
+  stuck = { phase: 'go', task, until: Date.now() + JUST_START_MS };
+  tick();
+}
+
+function stuckCard(st: Exclude<Stuck, { phase: 'go' }>) {
+  const close = () => ((stuck = null), tick());
+  if (st.phase === 'check') {
+    const keepGoing = () => {
+      const s = snapshot(getState(), Date.now());
+      // Carry on with it as this block's intention, so it stays in view
+      if (s.current) void setIntention(s.key, s.current.id, st.task);
+      close();
+    };
+    return [
+      h('p', {}, 'Five minutes on ', h('strong', {}, st.task), '. How’s it going?'),
+      h(
+        'div',
+        { class: 'actions' },
+        h('button', { class: 'primary', onClick: keepGoing }, 'Keep going'),
+        h('button', { onClick: () => void openStuck() }, 'Pick another'),
+        h('button', { class: 'quiet', onClick: close }, 'Close'),
+      ),
+    ];
+  }
+  if (st.tasks === null) return [h('p', {}, 'Reading your task list…')];
+  return [
+    h('p', {}, h('strong', {}, 'Stuck?'), ' Pick one thing and just start it for five minutes.'),
+    st.error && h('p', { class: 'muted' }, st.error),
+    st.tasks.length > 0 &&
+      h(
+        'ul',
+        { class: 'task-pick' },
+        st.tasks.map((t) => h('li', {}, h('button', { onClick: () => startTask(t.text) }, h('span', {}, t.text), h('span', { class: 'muted' }, t.inProgress ? 'in progress' : 'to do')))),
+      ),
+    h(
+      'div',
+      { class: 'actions' },
+      st.error.startsWith('Choose') && h('button', { class: 'primary', onClick: () => ((stuck = null), void openPlanner('settings')) }, 'Open Settings'),
+      h('button', { class: 'quiet', onClick: close }, 'Cancel'),
+    ),
+  ];
+}
+
+/** "How did it go?" when a block ends, or early from ✓ to finish it now. */
+function reviewCard(key: string, block: Planned, mode: 'ended' | 'finish') {
+  const note = h('input', { placeholder: 'A line on how it went (optional)' });
+  const answer = (status: 'done' | 'partly' | 'skipped') => () => {
+    finishing = null;
+    return logBlock(key, block.id, status, note.value);
+  };
+  return [
+    mode === 'finish'
+      ? h('p', {}, 'Finish ', h('strong', {}, block.name), ' now? Anything chained after it starts straight away.')
+      : h('p', {}, h('strong', {}, block.name), ' ended. How did it go?'),
+    note,
+    h(
+      'div',
+      { class: 'actions' },
+      h('button', { class: 'primary', onClick: answer('done') }, 'Done'),
+      h('button', { onClick: answer('partly') }, 'Partly'),
+      h('button', { onClick: answer('skipped') }, 'Skipped'),
+      mode === 'finish'
+        ? h('button', { class: 'quiet', onClick: () => ((finishing = null), tick()) }, 'Cancel')
+        : h('button', { class: 'quiet', title: 'Hold reminders for 10 minutes', onClick: () => snooze(key, block.id) }, '+10'),
+    ),
+  ];
+}
+
+function renderPrompt(s: Snapshot, p: Prompt) {
   if (p.kind === 'start') {
     promptEl.replaceChildren(
       h('p', {}, h('strong', {}, p.block.name), ' is on now. Start it?'),
@@ -230,20 +400,7 @@ function renderPrompt(s: Snapshot) {
       ),
     );
   } else {
-    const note = h('input', { placeholder: 'A line on how it went (optional)' });
-    const answer = (status: 'done' | 'partly' | 'skipped') => () => logBlock(s.key, p.block.id, status, note.value);
-    promptEl.replaceChildren(
-      h('p', {}, h('strong', {}, p.block.name), ' ended. How did it go?'),
-      note,
-      h(
-        'div',
-        { class: 'actions' },
-        h('button', { class: 'primary', onClick: answer('done') }, 'Done'),
-        h('button', { onClick: answer('partly') }, 'Partly'),
-        h('button', { onClick: answer('skipped') }, 'Skipped'),
-        h('button', { class: 'quiet', title: 'Hold reminders for 10 minutes', onClick: () => snooze(s.key, p.block.id) }, '+10'),
-      ),
-    );
+    fill(reviewCard(s.key, p.block, 'ended'));
   }
 }
 
@@ -418,8 +575,17 @@ function alerts(s: Snapshot) {
   };
   const thresholds = [...settings.warnMinutes].sort((a, b) => a - b);
 
-  // Heads-up before the current block ends, or before the next one starts during free time
-  const target = s.current && !s.awaitingStart ? s.current : !s.current ? s.next : null;
+  // Checked out: nothing chimes or pops up until you're back
+  if (state.away) {
+    lastCurrent = s.current ? `${s.key}:${s.current.id}` : '';
+    lastStep = s.step ? `${lastCurrent}:${s.step.index}` : '';
+    booted = true;
+    return;
+  }
+
+  // Heads-up before the current block ends, or before the next one starts during
+  // free time. A chained block waiting on its anchor has no clock to warn about.
+  const target = s.current && !s.awaitingStart ? s.current : !s.current && !s.next?.waiting ? s.next : null;
   if (target) {
     const crossed = thresholds.filter((t) => s.remainingMs <= t * 60_000);
     const keyFor = (t: number) => `${s.key}:${target.id}:${s.current ? 'end' : 'start'}:${t}`;
@@ -450,9 +616,10 @@ function alerts(s: Snapshot) {
   }
   lastStep = stepKey;
 
-  // The hyperfocus guard: card → toast → overlay
+  // The hyperfocus guard: card → toast → overlay. Held off for a few minutes after
+  // checking back in, so a block that ended while you were out doesn't ambush you.
   const p = s.prompt;
-  if (p) {
+  if (p && Date.now() - returnedAt > settings.escalateAfterMin * 60_000) {
     const rec = dayRecord(state, s.key);
     const level = escalation(p, rec, settings, s.now);
     const promptId = `${s.key}:${p.kind}:${p.block.id}:${rec.snoozedUntil[p.block.id] ?? ''}`;
@@ -490,8 +657,27 @@ async function showOverlay() {
 
 function tick() {
   const s = snapshot(getState(), Date.now());
+  if (stuck?.phase === 'go' && s.now >= stuck.until) {
+    stuck = { phase: 'check', task: stuck.task };
+    if (getState().settings.chime) chime('step');
+  }
   render(s);
   alerts(s);
+}
+
+/** The tray item and Ctrl+Alt+C: out if you're here, in if you're out. */
+function toggleCheck() {
+  const { away } = getState();
+  if (!away) return checkOut();
+  if (!away.back) return checkIn();
+}
+
+function markEvent(id: string) {
+  const event = getState().events.find((e) => e.id === id);
+  if (!event) return;
+  void fireEvent(dayKey(new Date()), id);
+  showFlash({ icon: '✓', text: `${event.name} · ${formatClock(Date.now())}` });
+  tick();
 }
 
 async function main() {
@@ -510,7 +696,20 @@ async function main() {
   $('open-planner').addEventListener('click', () => void openPlanner());
   $('open-focus').addEventListener('click', () => void openFocus());
   $('toggle-dock').addEventListener('click', () => void setMode(mode === 'dock' ? 'float' : 'dock'));
-  if (inTauri) void listen('toggle-dock', () => void setMode(mode === 'dock' ? 'float' : 'dock'));
+  $('finish-block').addEventListener('click', () => {
+    finishing = snapshot(getState(), Date.now()).current?.id ?? null;
+    tick();
+  });
+  $('im-stuck').addEventListener('click', () => void openStuck());
+  $('check-out').addEventListener('click', () => void toggleCheck());
+  if (inTauri) {
+    void listen('toggle-dock', () => void setMode(mode === 'dock' ? 'float' : 'dock'));
+    void listen('check-toggle', () => void toggleCheck());
+    void listen('stuck', () => void openStuck());
+    void listen<string>('fire-event', (e) => markEvent(e.payload));
+    // Registers your events' hotkeys and tray items for this run
+    void invoke('set_events', { events: getState().events }).catch(() => {});
+  }
 
   watchGarden();
   subscribe((state) => {

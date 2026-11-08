@@ -7,13 +7,24 @@ import {
   atMinutes,
   dayKey,
   emptyDay,
+  formatClock,
   toMinutes,
 } from './model';
 
-/** A block placed on a concrete date, with today's changes applied. */
+/**
+ * A block placed on a concrete date, with today's changes applied.
+ * `start`/`end` and their ms are when it actually runs; `planStart`/`planEnd`
+ * are its slot on the clock. They differ when a chained block starts early or late.
+ */
 export interface Planned extends Block {
   startMs: number;
   endMs: number;
+  planStart: string;
+  planEnd: string;
+  planStartMs: number;
+  planEndMs: number;
+  /** Chained and its anchor hasn't happened yet: it sits at its planned slot as an estimate */
+  waiting: boolean;
   oneOff: boolean;
   skippedToday: boolean;
   movedToday: boolean;
@@ -73,17 +84,49 @@ export function planFor(state: AppState, date: Date, includeSkipped = false): Pl
   const fromRoutine = state.routine.filter((b) => b.days.includes(weekday)).map((b) => ({ block: b, oneOff: false }));
   const oneOffs = rec.override.extra.map((b) => ({ block: b, oneOff: true }));
 
-  return [...fromRoutine, ...oneOffs]
+  const all = [...fromRoutine, ...oneOffs];
+  const onToday = new Set(all.map(({ block }) => block.id));
+
+  return all
     .map(({ block, oneOff }): Planned => {
       const moved = rec.override.times[block.id];
-      const start = moved?.start ?? block.start;
-      const end = moved?.end ?? block.end;
+      const planStart = moved?.start ?? block.start;
+      const planEnd = moved?.end ?? block.end;
+      const planStartMs = atMinutes(date, toMinutes(planStart));
+      const planEndMs = atMinutes(date, toMinutes(planEnd));
+
+      let startMs = planStartMs;
+      let endMs = planEndMs;
+      let waiting = false;
+      // An anchor that isn't on today (a block that doesn't run on this weekday,
+      // a deleted event) falls back to the clock
+      const anchor = block.after;
+      const anchored = anchor && (anchor.kind === 'event' ? state.events.some((e) => e.id === anchor.id) : onToday.has(anchor.id));
+      if (anchor && anchored) {
+        const fired = anchor.kind === 'block' ? rec.finishedAt[anchor.id] : rec.events[anchor.id]?.[0];
+        const latest = block.latestStart ? atMinutes(date, toMinutes(block.latestStart)) : undefined;
+        const trigger = rec.startedAt[block.id] ?? fired ?? latest;
+        if (trigger === undefined) waiting = true;
+        else {
+          startMs = trigger;
+          endMs = trigger + (planEndMs - planStartMs);
+        }
+      }
+      // Marked done while still running: it ends there
+      const finished = rec.finishedAt[block.id];
+      if (!waiting && finished !== undefined && finished >= startMs && finished < endMs) endMs = finished;
+
       return {
         ...block,
-        start,
-        end,
-        startMs: atMinutes(date, toMinutes(start)),
-        endMs: atMinutes(date, toMinutes(end)),
+        start: formatClock(startMs),
+        end: formatClock(endMs),
+        startMs,
+        endMs,
+        planStart,
+        planEnd,
+        planStartMs,
+        planEndMs,
+        waiting,
         oneOff,
         skippedToday: rec.override.skip.includes(block.id),
         movedToday: moved !== undefined,
@@ -92,6 +135,17 @@ export function planFor(state: AppState, date: Date, includeSkipped = false): Pl
     .filter((p) => includeSkipped || !p.skippedToday)
     .sort((a, b) => a.startMs - b.startMs);
 }
+
+/** "after Morning routine", "after Ate lunch": what a chained block is waiting for. */
+export function anchorLabel(state: AppState, block: Block): string {
+  const a = block.after;
+  if (!a) return '';
+  const name = a.kind === 'block' ? state.routine.find((b) => b.id === a.id)?.name : state.events.find((e) => e.id === a.id)?.name;
+  return name ? `after ${name}` : '';
+}
+
+/** A chained block that ran or is running off its planned slot. */
+export const shifted = (p: Planned) => !p.waiting && Math.abs(p.startMs - p.planStartMs) >= 60_000;
 
 /** Steps run back to back from when the block started; null once they're all used up. */
 export function currentStep(block: Block, elapsedMs: number): StepInfo | null {
@@ -110,10 +164,11 @@ export function snapshot(state: AppState, now: number): Snapshot {
   const plan = planFor(state, date);
   // Blocks may overlap. The one that started last is the one in front: a call
   // inside a deep-work block takes over for its length, then deep work returns.
-  const running = plan.filter((p) => p.startMs <= now && now < p.endMs);
+  const running = plan.filter((p) => !p.waiting && p.startMs <= now && now < p.endMs);
   const current = running[running.length - 1] ?? null;
   const alsoRunning = running.slice(0, -1).reverse();
-  const next = plan.find((p) => p.startMs > now) ?? null;
+  // A waiting block is "next" even once its planned time has passed: it's still to come
+  const next = plan.find((p) => p.waiting || p.startMs > now) ?? null;
 
   let awaitingStart = false;
   let remainingMs = 0;
@@ -130,10 +185,10 @@ export function snapshot(state: AppState, now: number): Snapshot {
     if (!awaitingStart) step = currentStep(current, now - anchor);
   } else if (next) {
     const previousEnd = plan
-      .filter((p) => p.endMs <= now)
+      .filter((p) => !p.waiting && p.endMs <= now)
       .reduce((latest, p) => Math.max(latest, p.endMs), atMinutes(date, 0));
     totalMs = next.startMs - previousEnd;
-    remainingMs = next.startMs - now;
+    remainingMs = Math.max(0, next.startMs - now);
   }
 
   const progress = totalMs > 0 ? Math.min(1, Math.max(0, 1 - remainingMs / totalMs)) : 0;
@@ -168,6 +223,7 @@ function pickPrompt(
   // Optional blocks nobody started have nothing to review.
   const review = plan.find(
     (p) =>
+      !p.waiting &&
       p.endMs <= now &&
       now - p.endMs < REVIEW_WINDOW_MS &&
       rec.log[p.id] === undefined &&

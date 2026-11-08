@@ -145,6 +145,54 @@ describe('escalation', () => {
   });
 });
 
+describe('chained blocks', () => {
+  const morning = block('morning', '07:00', '07:45');
+  const work = block('work', '09:00', '12:00', { after: { kind: 'block', id: 'morning' } });
+
+  it('waits at its planned slot until the block before it is finished', () => {
+    const s = snapshot(stateWith([morning, work]), at('09:30'));
+    const planned = s.plan.find((p) => p.id === 'work')!;
+    expect(planned.waiting).toBe(true);
+    expect(planned.start).toBe('09:00');
+    expect(s.current).toBeNull();
+    expect(s.next?.id).toBe('work');
+    expect(s.prompt?.block.id).toBe('morning');
+  });
+
+  it('starts when the block before is marked done, keeping its length and its planned slot', () => {
+    const s = stateWith([morning, work], (st) => (st.days[KEY] = { ...emptyDay(), log: { morning: 'done' }, finishedAt: { morning: at('08:10') } }));
+    const snap = snapshot(s, at('08:30'));
+    expect(snap.current?.id).toBe('work');
+    expect(snap.current).toMatchObject({ start: '08:10', end: '11:10', planStart: '09:00', planEnd: '12:00', waiting: false });
+  });
+
+  it('ends a running block early when it is marked done', () => {
+    const s = stateWith([morning], (st) => (st.days[KEY] = { ...emptyDay(), log: { morning: 'done' }, finishedAt: { morning: at('07:20') } }));
+    expect(planFor(s, WED)[0].end).toBe('07:20');
+    expect(snapshot(s, at('07:30')).current).toBeNull();
+  });
+
+  it('falls back to its latest start when nothing happens', () => {
+    const late = { ...work, latestStart: '10:00' };
+    expect(snapshot(stateWith([morning, late]), at('10:05')).current).toMatchObject({ id: 'work', start: '10:00', end: '13:00' });
+  });
+
+  it('starts after one of your events', () => {
+    const study = block('study', '20:00', '21:00', { after: { kind: 'event', id: 'kids' } });
+    const s = stateWith([study], (st) => {
+      st.events = [{ id: 'kids', name: 'Kids in bed', hotkey: '' }];
+      st.days[KEY] = { ...emptyDay(), events: { kids: [at('20:40')] } };
+    });
+    expect(snapshot(s, at('20:30')).current).toBeNull();
+    expect(snapshot(s, at('20:45')).current).toMatchObject({ id: 'study', start: '20:40', end: '21:40' });
+  });
+
+  it('goes back to the clock when its anchor isn’t on today', () => {
+    const s = stateWith([block('work', '09:00', '12:00', { after: { kind: 'block', id: 'gone' } })]);
+    expect(snapshot(s, at('09:30')).current?.id).toBe('work');
+  });
+});
+
 describe('overlapping blocks', () => {
   const s = stateWith([block('deep', '09:00', '12:00'), block('call', '10:00', '10:30'), block('lunch', '12:00', '13:00')]);
 

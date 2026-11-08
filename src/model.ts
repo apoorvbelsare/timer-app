@@ -18,6 +18,30 @@ export interface Block {
   /** Optional blocks ask "start or skip?" instead of starting on their own */
   optional: boolean;
   steps: Step[];
+  /**
+   * Chained: starts when this happens instead of at `start`. The start/end
+   * times stay as its planned slot, and set how long it runs.
+   */
+  after?: Anchor | null;
+  /** A chained block starts at this time anyway if the anchor hasn't happened */
+  latestStart?: string | null;
+}
+
+/** What a chained block waits for: another block being finished, or one of your events. */
+export type Anchor = { kind: 'block'; id: string } | { kind: 'event'; id: string };
+
+/** Something you mark as it happens ("Ate lunch"), from the tray or a hotkey. */
+export interface EventDef {
+  id: string;
+  name: string;
+  /** "Ctrl+Alt+L"; empty for none */
+  hotkey: string;
+}
+
+/** Checked out and away from the PC; `back` is set once you check in and the return ritual runs. */
+export interface Away {
+  since: number;
+  back: number | null;
 }
 
 /** Changes that apply to one date only; the routine itself stays untouched. */
@@ -51,6 +75,10 @@ export interface DayRecord {
   intentions: Record<string, Intention>;
   /** One line on how a block went: the "after" of the ritual */
   notes: Record<string, string>;
+  /** When a block was first marked Done / Partly / Skipped: ends it early if still running, and starts what's chained to it */
+  finishedAt: Record<string, number>;
+  /** Each time an event was marked today */
+  events: Record<string, number[]>;
 }
 
 export type Ambient = 'off' | 'rain' | 'forest' | 'brown';
@@ -77,6 +105,10 @@ export interface Settings {
   quietStart: string;
   quietEnd: string;
   pingVolume: number;
+  /** The return ritual, one step per line, shown when you check back in */
+  ritualSteps: string[];
+  /** A Markdown file whose "To do" and "In progress" sections feed the "I'm stuck" picker */
+  taskFile: string | null;
 }
 
 /** A stray thought caught mid-focus, to deal with later. */
@@ -93,6 +125,8 @@ export interface AppState {
   settings: Settings;
   days: Record<string, DayRecord>;
   parked: Parked[];
+  events: EventDef[];
+  away: Away | null;
 }
 
 /** Earthy tones: sage, clay, ochre, dusk, heather, lake, rose, moss */
@@ -118,11 +152,19 @@ export function defaultSettings(): Settings {
     quietStart: '22:00',
     quietEnd: '07:00',
     pingVolume: 0.7,
+    ritualSteps: [
+      'Breathe out slowly and drop your shoulders',
+      'Have a sip of water',
+      'Close anything you don’t need for this block',
+      'Read your intention again',
+      'Pick the very next small action',
+    ],
+    taskFile: null,
   };
 }
 
 export function defaultState(): AppState {
-  return { version: 1, routine: [], settings: defaultSettings(), days: {}, parked: [] };
+  return { version: 1, routine: [], settings: defaultSettings(), days: {}, parked: [], events: [], away: null };
 }
 
 export function emptyDay(): DayRecord {
@@ -133,6 +175,8 @@ export function emptyDay(): DayRecord {
     snoozedUntil: {},
     intentions: {},
     notes: {},
+    finishedAt: {},
+    events: {},
   };
 }
 
@@ -151,6 +195,8 @@ export function normalizeState(raw: Partial<AppState>): AppState {
     settings: { ...defaultSettings(), ...raw.settings },
     days,
     parked: raw.parked ?? [],
+    events: raw.events ?? [],
+    away: raw.away ?? null,
   };
 }
 
