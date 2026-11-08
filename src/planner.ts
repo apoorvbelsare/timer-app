@@ -4,7 +4,8 @@ import { disable as disableAutostart, enable as enableAutostart, isEnabled as au
 import { emit, listen } from '@tauri-apps/api/event';
 import { Window } from '@tauri-apps/api/window';
 import { addTodo, ensureDay, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, toggleTodo } from './actions';
-import { chime, unlockAudioOnClick } from './alerts';
+import { chime, playTune, unlockAudioOnClick } from './alerts';
+import { hourLabel, hourTune } from './hourly';
 import { h } from './dom';
 import { type Planned, dayRecord, planFor, planOverlap, routineOverlap, snapshot } from './engine';
 import {
@@ -595,6 +596,50 @@ function renderSettings(): HTMLElement {
           { class: 'row' },
           h('button', { class: 'btn ghost small', onClick: () => chime() }, 'Play'),
           h('input', { type: 'checkbox', checked: settings.chime, onChange: (e: Event) => update((d) => void (d.settings.chime = (e.target as HTMLInputElement).checked)) }),
+        ),
+      ),
+      h(
+        'div',
+        { class: 'setting stacked' },
+        h(
+          'div',
+          { class: 'setting-row' },
+          h(
+            'div',
+            {},
+            h('h3', {}, 'Hourly ping'),
+            h('p', { class: 'sub' }, 'A short tune on every hour, different for each one. Mornings rise bright and high, evenings fall low and soft, so the sound alone tells you roughly when you are.'),
+          ),
+          h('input', { type: 'checkbox', checked: settings.hourlyPing, onChange: (e: Event) => update((d) => void (d.settings.hourlyPing = (e.target as HTMLInputElement).checked)) }),
+        ),
+        h(
+          'div',
+          { class: 'row' },
+          field('Quiet from', h('input', { type: 'time', value: settings.quietStart, onChange: (e: Event) => update((d) => void (d.settings.quietStart = (e.target as HTMLInputElement).value || '22:00')) })),
+          field('Until', h('input', { type: 'time', value: settings.quietEnd, onChange: (e: Event) => update((d) => void (d.settings.quietEnd = (e.target as HTMLInputElement).value || '07:00')) })),
+          field(
+            'Volume',
+            h('input', {
+              type: 'range',
+              min: '0.1',
+              max: '1',
+              step: '0.05',
+              value: String(settings.pingVolume),
+              onChange: (e: Event) => update((d) => void (d.settings.pingVolume = Number((e.target as HTMLInputElement).value))),
+            }),
+          ),
+        ),
+        h('p', { class: 'sub small' }, 'Listen to each hour:'),
+        h(
+          'div',
+          { class: 'hour-grid' },
+          Array.from({ length: 24 }, (_, hour) =>
+            h(
+              'button',
+              { class: `hour-chip ${hourTune(hour).part}${hour === new Date().getHours() ? ' now' : ''}`, title: `Play the ${hourLabel(hour)} tune`, onClick: () => playTune(hourTune(hour), getState().settings.pingVolume) },
+              hourLabel(hour).replace('midnight', '12 am').replace('noon', '12 pm'),
+            ),
+          ),
         ),
       ),
       h(

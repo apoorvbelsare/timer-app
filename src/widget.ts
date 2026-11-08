@@ -5,10 +5,11 @@ import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { emit } from '@tauri-apps/api/event';
 import { Window, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
 import { dismissIntention, logBlock, setIntention, skipToday, snooze, startBlock } from './actions';
-import { chime, notify, unlockAudioOnClick } from './alerts';
+import { chime, notify, playTune, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
 import { type Snapshot, dayRecord, escalation, snapshot } from './engine';
 import { type Garden, garden, growthNews } from './garden';
+import { hourLabel, hourTune, inQuietHours } from './hourly';
 import type { FocusMode } from './focus';
 import { formatDuration, minuteOfDay } from './model';
 import { CIRCUMFERENCE, ringColor, ringRemaining, ringText } from './ring';
@@ -126,15 +127,25 @@ function renderStrip(s: Snapshot) {
   );
 }
 
-/** A short celebration when the garden grows, shown for a few seconds under the strip. */
-let gardenNews: { text: string; until: number } | null = null;
+/**
+ * A passing note under the strip for a few seconds: the garden growing, or the
+ * hour changing. Tapping it opens the matching page.
+ */
+interface Flash {
+  icon: string;
+  text: string;
+  until: number;
+  open?: 'garden';
+}
+let flash: Flash | null = null;
+const showFlash = (f: Omit<Flash, 'until'>) => (flash = { ...f, until: Date.now() + 8000 });
 let lastGarden: Garden | null = null;
 
 function watchGarden() {
   const now = garden(getState());
   const news = lastGarden && growthNews(lastGarden, now);
   if (news) {
-    gardenNews = { text: news, until: Date.now() + 8000 };
+    showFlash({ icon: '🌱', text: news, open: 'garden' });
     if (now.grownCount > lastGarden!.grownCount) notify('Your garden grew', news);
   }
   lastGarden = now;
@@ -146,16 +157,16 @@ function watchGarden() {
  */
 let extrasKey = '';
 function renderExtras(s: Snapshot) {
-  if (gardenNews && Date.now() > gardenNews.until) gardenNews = null;
+  if (flash && Date.now() > flash.until) flash = null;
   const parked = getState().parked.filter((p) => !p.done).length;
   const free = !s.current && !!s.next && s.remainingMs > 3 * 60_000;
-  const kind = s.prompt ? '' : gardenNews ? `news:${gardenNews.text}` : free ? `free:${parked}` : !s.current && parked ? `parked:${parked}` : '';
+  const kind = s.prompt ? '' : flash ? `news:${flash.text}` : free ? `free:${parked}` : !s.current && parked ? `parked:${parked}` : '';
   if (kind === extrasKey) return;
   extrasKey = kind;
   extrasEl.hidden = !kind;
   const parkedChip = parked > 0 && h('button', { class: 'chip', title: 'Thoughts you parked', onClick: () => openPlanner('parking') }, `Parked · ${parked}`);
   const content = kind.startsWith('news')
-    ? [h('button', { class: 'news', onClick: () => openPlanner('garden') }, h('span', { class: 'sprout', 'aria-hidden': 'true' }, '🌱'), gardenNews!.text)]
+    ? [h('button', { class: 'news', onClick: () => flash?.open && openPlanner(flash.open) }, h('span', { 'aria-hidden': 'true' }, flash!.icon), flash!.text)]
     : kind.startsWith('free')
       ? [
           h('span', {}, 'Recharge'),
@@ -243,10 +254,36 @@ let lastCurrent = '';
 let lastStep = '';
 let overlayShownFor = '';
 
+/** When the last chime played, so the hourly tune never lands on top of one. */
+let lastSoundAt = 0;
+
+/** The hourly ping: a tune of its own for every hour, a pulse, and a line of context. */
+function ringHour(hour: number) {
+  const { settings } = getState();
+  playTune(hourTune(hour), settings.pingVolume);
+  lastSoundAt = Date.now();
+  app.classList.add('hour-pulse');
+  window.setTimeout(() => app.classList.remove('hour-pulse'), 2400);
+  const s = snapshot(getState(), Date.now());
+  const label = hourLabel(hour);
+  const context =
+    s.current && !s.awaitingStart
+      ? ` · ${formatDuration(s.remainingMs)} left in ${s.current.name}`
+      : s.next
+        ? ` · ${s.next.name} at ${s.next.start}`
+        : '';
+  showFlash({ icon: '🕰️', text: `${label[0].toUpperCase()}${label.slice(1)}${context}` });
+  render(s);
+}
+
 function alerts(s: Snapshot) {
   const state = getState();
   const { settings } = state;
-  const sound = () => settings.chime && chime();
+  const sound = () => {
+    if (!settings.chime) return;
+    chime();
+    lastSoundAt = Date.now();
+  };
   const thresholds = [...settings.warnMinutes].sort((a, b) => a - b);
 
   // Heads-up before the current block ends, or before the next one starts during free time
@@ -275,7 +312,10 @@ function alerts(s: Snapshot) {
   lastCurrent = currentKey;
 
   const stepKey = s.step ? `${currentKey}:${s.step.index}` : '';
-  if (booted && stepKey && stepKey !== lastStep && s.step!.index > 0 && settings.chime) chime('step');
+  if (booted && stepKey && stepKey !== lastStep && s.step!.index > 0 && settings.chime) {
+    chime('step');
+    lastSoundAt = Date.now();
+  }
   lastStep = stepKey;
 
   // The hyperfocus guard: card → toast → overlay
@@ -293,6 +333,15 @@ function alerts(s: Snapshot) {
       overlayShownFor = promptId;
       void showOverlay();
     }
+  }
+
+  // Once in the first two minutes of each hour, never in quiet hours, and a few
+  // seconds after any chime that just played so the sounds don't pile up
+  const date = new Date(s.now);
+  const hourKey = `${s.key}:hour:${date.getHours()}`;
+  if (booted && settings.hourlyPing && date.getMinutes() < 2 && !fired.has(hourKey) && !inQuietHours(date, settings.quietStart, settings.quietEnd)) {
+    fired.add(hourKey);
+    window.setTimeout(() => ringHour(date.getHours()), Math.max(0, lastSoundAt + 3500 - Date.now()));
   }
   booted = true;
 }

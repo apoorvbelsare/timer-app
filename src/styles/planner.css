@@ -774,3 +774,54 @@ kbd {
   gap: 8px;
   align-items: flex-start;
 }
+
+/* ── Hourly ping settings ── */
+.setting.stacked {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 12px;
+}
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+}
+.setting input[type='range'] {
+  accent-color: var(--accent);
+  padding: 0;
+}
+.hour-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 5px;
+}
+.hour-chip {
+  padding: 6px 0;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  font: inherit;
+  font-size: 11.5px;
+  color: var(--text);
+  cursor: pointer;
+}
+.hour-chip:hover {
+  filter: brightness(0.96);
+  border-color: var(--accent);
+}
+.hour-chip.morning {
+  background: color-mix(in srgb, #e2b25c 22%, var(--surface));
+}
+.hour-chip.afternoon {
+  background: color-mix(in srgb, #d08a5f 18%, var(--surface));
+}
+.hour-chip.evening {
+  background: color-mix(in srgb, #8f9fd1 22%, var(--surface));
+}
+.hour-chip.night {
+  background: color-mix(in srgb, #2f5d50 22%, var(--surface));
+}
+.hour-chip.now {
+  outline: 2px solid var(--accent);
+  font-weight: 700;
+}

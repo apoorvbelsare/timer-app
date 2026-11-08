@@ -67,6 +67,12 @@ export interface Settings {
   autostartConfigured: boolean;
   ambient: Ambient;
   ambientVolume: number;
+  /** A short tune on every hour, different for each hour */
+  hourlyPing: boolean;
+  /** No pings between these times; may wrap past midnight */
+  quietStart: string;
+  quietEnd: string;
+  pingVolume: number;
 }
 
 /** A stray thought caught mid-focus, to deal with later. */
@@ -102,6 +108,10 @@ export function defaultSettings(): Settings {
     autostartConfigured: false,
     ambient: 'off',
     ambientVolume: 0.5,
+    hourlyPing: true,
+    quietStart: '22:00',
+    quietEnd: '07:00',
+    pingVolume: 0.7,
   };
 }
 
