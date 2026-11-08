@@ -462,6 +462,27 @@ button:focus-visible {
 .docked.hour-pulse {
   animation: none;
 }
+
+/* ── Zone colour: during a block, a deep shade of its colour replaces the forest ── */
+.widget.zoned {
+  --bg: color-mix(in oklab, var(--zone) 34%, rgb(10 16 15 / 0.95));
+  --glow: color-mix(in srgb, var(--zone) 28%, transparent);
+}
+.widget.zoned:not(.docked),
+.zoned .bar {
+  background:
+    radial-gradient(120% 140% at 100% 0%, var(--glow), transparent 55%),
+    var(--bg);
+  border-color: color-mix(in srgb, var(--zone) 30%, transparent);
+}
+.zoned .bar {
+  background:
+    radial-gradient(60% 160% at 100% 0%, var(--glow), transparent 60%),
+    var(--bg);
+}
+.zoned .step {
+  color: color-mix(in srgb, var(--zone) 70%, var(--cream));
+}
 .docked.hour-pulse .bar {
   animation: hour-pulse 2.4s ease-out;
 }

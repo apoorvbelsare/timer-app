@@ -63,6 +63,9 @@ function render(s: Snapshot) {
   arc.style.stroke = ringColor(s);
   app.classList.toggle('waiting', s.awaitingStart);
   app.classList.toggle('closing', !!s.current && s.remainingMs <= 60_000);
+  // The whole card takes on the block's colour, so the zone you're in reads at a glance
+  app.classList.toggle('zoned', !!s.current);
+  if (s.current) app.style.setProperty('--zone', s.current.color);
 
   const [value, unit] = s.current || s.next ? ringText(s.remainingMs) : ['✓', ''];
   $('ring-value').textContent = value;

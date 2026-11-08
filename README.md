@@ -6,7 +6,7 @@ Timer sits in the empty middle of your taskbar, or in a corner of your screen, a
 
 Everything stays on your PC. There's no account, no cloud and no tracking.
 
-> **`main` has the latest version of Timer (v0.4.0, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
+> **`main` has the latest version of Timer (v0.4.1, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
 
 ---
 
@@ -29,7 +29,7 @@ Many people with ADHD struggle to sense time passing (often called *time blindne
 ## Features
 
 ### See your time
-- **Always-on widget:** a small card that stays on top, wherever you drag it. It shows a ring that shrinks as the current block runs out, the block's name and current step, and what's next. The ring changes from the block's colour to amber to coral near the end.
+- **Always-on widget:** a small card that stays on top, wherever you drag it. It shows a ring that shrinks as the current block runs out, the block's name and current step, and what's next. The whole card takes on a deep shade of the current block's colour (purple for a purple Study block, deep blue for a blue evening block), so you can tell which zone you're in at a glance; free time goes back to forest green. The ring changes from the block's colour to amber to coral near the end.
 - **Taskbar dock:** the widget can sit inside the taskbar instead, as one wide bar in the empty middle. It shows everything the card does on a single line: ring, block, step or intention, time left, what's next, the day strip, and the Breathe / Stretch / Parked chips. Prompts open as a card just above it.
   - **Drag the bar up** off the taskbar and it becomes the floating card again. **Drag the card onto the taskbar** and it docks. Drag the bar sideways to move it along the taskbar.
   - It stays above the taskbar when you click the taskbar, and hides while a fullscreen video, game or presentation is up.
@@ -92,7 +92,7 @@ If a `Timer_x.y.z_x64-setup.exe` is attached to the [Releases](https://github.co
    ```
 
 3. Run the installer it creates:
-   `src-tauri\target\release\bundle\nsis\Timer_0.4.0_x64-setup.exe`
+   `src-tauri\target\release\bundle\nsis\Timer_0.4.1_x64-setup.exe`
 
 After installing, **Timer** is in your Start menu, and it **starts with Windows** from the first launch. You can turn that off in Settings. To uninstall: **Windows Settings → Apps → Timer**.
 
@@ -208,7 +208,7 @@ npm run tauri build   # build the Windows installer
 
 | Branch | What it is |
 | --- | --- |
-| `main` | **Use this one: the latest version (v0.4.0, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
+| `main` | **Use this one: the latest version (v0.4.1, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
 | `feat/taskbar-dock` | Where the taskbar dock was built; the same as `main` |
 | `feat/garden-parking-lot` | v0.3.0: Flown style plus the garden, parking lot and hourly ping |
 | `feat/flown-style` | The Flown-inspired version without those three additions |
