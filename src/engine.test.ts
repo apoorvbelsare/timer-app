@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { escalation, planFor, planOverlap, routineOverlap, snapshot } from './engine';
-import { type AppState, type Block, defaultState, emptyDay } from './model';
+import { carryover, escalation, objectiveProgress, planFor, planOverlap, routineOverlap, shutdownDue, snapshot, workload } from './engine';
+import { type AppState, type Block, type Task, defaultState, emptyDay, normalizeState, weekKey } from './model';
 
 // Wednesday 4 November 2026
 const WED = new Date(2026, 10, 4);
@@ -95,7 +95,7 @@ describe('prompts', () => {
     expect(escalation(asked, emptyDay(), s.settings, at('08:50'))).toBe('none');
     expect(snapshot(s, at('08:57')).prompt).toBeNull();
 
-    s.days[KEY] = { ...emptyDay(), intentions: { a: { text: '', todos: [], dismissed: true } } };
+    s.days[KEY] = { ...emptyDay(), intentions: { a: { text: '', dismissed: true } } };
     expect(snapshot(s, at('08:10')).prompt).toBeNull();
 
     const off = stateWith(s.routine, (st) => (st.settings.askIntention = false));
@@ -157,5 +157,57 @@ describe('overlap checks', () => {
     const plan = planFor(stateWith([block('a', '08:00', '09:00'), block('b', '10:00', '11:00')]), WED);
     expect(planOverlap(plan, { id: 'b', start: '08:30', end: '09:30' })?.id).toBe('a');
     expect(planOverlap(plan, { id: 'b', start: '09:00', end: '10:30' })).toBeNull();
+  });
+});
+
+function task(id: string, extra: Partial<Task> = {}): Task {
+  return { id, title: id, date: KEY, estimateMin: 30, blockId: null, objectiveId: null, done: false, dropped: false, ...extra };
+}
+
+describe('tasks and rituals', () => {
+  it('adds up the day against capacity and against each block', () => {
+    const s = stateWith([block('a', '08:00', '09:00')], (st) => {
+      st.settings.capacityMin = 60;
+      st.tasks = [task('t1', { blockId: 'a', estimateMin: 45 }), task('t2', { blockId: 'a', estimateMin: 30 }), task('t3'), task('gone', { dropped: true })];
+    });
+    const load = workload(s, WED);
+    expect(load.taskMin).toBe(105);
+    expect(load.blocks[0]).toMatchObject({ taskMin: 75, blockMin: 60 });
+    expect(load.unscheduledMin).toBe(30);
+  });
+
+  it('carries over unfinished tasks from earlier days only', () => {
+    const s = stateWith([], (st) => {
+      st.tasks = [
+        task('old', { date: '2026-11-02' }),
+        task('done', { date: '2026-11-02', done: true }),
+        task('let-go', { date: '2026-11-03', dropped: true }),
+        task('today'),
+      ];
+    });
+    expect(carryover(s, KEY).map((t) => t.id)).toEqual(['old']);
+  });
+
+  it('offers the shutdown once its time comes, until the day is closed', () => {
+    const s = stateWith([], (st) => (st.settings.shutdownTime = '21:30'));
+    expect(shutdownDue(s, at('21:00'))).toBe(false);
+    expect(shutdownDue(s, at('21:45'))).toBe(true);
+    s.days[KEY] = { ...emptyDay(), shutdown: { at: at('21:50'), reflection: '' } };
+    expect(shutdownDue(s, at('22:00'))).toBe(false);
+  });
+
+  it('counts linked tasks towards a weekly objective', () => {
+    const s = stateWith([], (st) => (st.tasks = [task('a', { objectiveId: 'o', done: true }), task('b', { objectiveId: 'o' }), task('c')]));
+    expect(objectiveProgress(s, { id: 'o', week: weekKey(KEY), title: 'Ship it', done: false })).toEqual({ done: 1, total: 2 });
+    expect(weekKey(KEY)).toBe('2026-11-02');
+    expect(weekKey('2026-11-08')).toBe('2026-11-02');
+  });
+
+  it('turns old block to-dos into tasks when loading a saved state', () => {
+    const migrated = normalizeState({
+      days: { [KEY]: { ...emptyDay(), intentions: { a: { text: 'Draft', dismissed: false, todos: [{ id: 'x', text: 'Outline', done: true }] } as never } as never } },
+    });
+    expect(migrated.tasks).toMatchObject([{ id: 'x', title: 'Outline', blockId: 'a', date: KEY, done: true }]);
+    expect(migrated.days[KEY].intentions.a).toEqual({ text: 'Draft', dismissed: false });
   });
 });

@@ -1,15 +1,10 @@
 @import './theme.css';
 
-/* The widget floats over whatever is on screen: a small piece of dusk-forest calm. */
+/* The widget floats over whatever is on screen: a small, quiet card of morning light. */
 :root {
-  --bg: rgba(31, 59, 51, 0.95);
-  --text: var(--cream);
-  --muted: rgba(246, 241, 231, 0.6);
-  --line: rgba(246, 241, 231, 0.12);
-  --track: rgba(246, 241, 231, 0.1);
-  --ring-idle: var(--sage);
-  color-scheme: dark;
-  font-family: var(--font-body);
+  --line: var(--border);
+  --track: var(--surface-2);
+  font-family: var(--font);
 }
 
 html,
@@ -23,12 +18,12 @@ body {
 .widget {
   margin: 4px;
   padding: 12px 14px 11px;
-  border-radius: 22px;
-  background:
-    radial-gradient(120% 140% at 100% 0%, rgba(157, 184, 160, 0.16), transparent 55%),
-    var(--bg);
+  -webkit-font-smoothing: antialiased;
+  border-radius: 16px;
+  background: var(--surface);
   color: var(--text);
   border: 1px solid var(--line);
+  box-shadow: 0 2px 6px rgba(43, 39, 36, 0.08);
   cursor: grab;
 }
 
@@ -85,9 +80,9 @@ body {
   line-height: 1;
 }
 #ring-value {
-  font-family: var(--font-display);
-  font-size: 25px;
-  font-weight: 500;
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 #ring-unit {
@@ -108,9 +103,9 @@ body {
   gap: 3px;
 }
 .title {
-  font-family: var(--font-display);
-  font-size: 18px;
-  font-weight: 500;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -118,8 +113,8 @@ body {
 }
 .step {
   font-size: 12.5px;
-  font-weight: 600;
-  color: var(--sage);
+  font-weight: 560;
+  color: var(--accent-strong);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -160,7 +155,7 @@ body {
   cursor: pointer;
 }
 .icon-btn:hover {
-  background: rgba(246, 241, 231, 0.09);
+  background: var(--surface-2);
   color: var(--text);
 }
 .icon-btn svg {
@@ -199,7 +194,7 @@ body {
   height: 11px;
   margin-left: -1px;
   border-radius: 1px;
-  background: var(--cream);
+  background: var(--accent);
 }
 
 /* ── Recharge chips ── */
@@ -231,7 +226,12 @@ body {
   cursor: pointer;
 }
 .chip:hover {
-  background: rgba(246, 241, 231, 0.09);
+  background: var(--surface-2);
+}
+.chip.accent {
+  border-color: transparent;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
 }
 
 /* ── Prompt card ── */
@@ -251,7 +251,7 @@ body {
   padding: 7px 10px;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(16, 34, 29, 0.5);
+  background: var(--bg);
   color: var(--text);
   font: inherit;
   font-size: 12.5px;
@@ -261,7 +261,7 @@ body {
 }
 .prompt input:focus {
   outline: none;
-  border-color: var(--sage);
+  border-color: var(--accent);
 }
 .actions {
   display: flex;
@@ -271,8 +271,8 @@ body {
   flex: 1;
   padding: 7px 0;
   border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(246, 241, 231, 0.05);
+  border-radius: 8px;
+  background: var(--surface);
   color: var(--text);
   font: inherit;
   font-size: 12.5px;
@@ -280,12 +280,12 @@ body {
   cursor: pointer;
 }
 .actions button:hover {
-  background: rgba(246, 241, 231, 0.12);
+  background: var(--surface-2);
 }
 .actions button.primary {
-  background: var(--cream);
+  background: var(--accent);
   border-color: transparent;
-  color: var(--forest-deep);
+  color: var(--accent-text);
 }
 .actions button.quiet {
   flex: 0 0 auto;
@@ -293,6 +293,6 @@ body {
   color: var(--muted);
 }
 button:focus-visible {
-  outline: 2px solid var(--sage);
+  outline: 2px solid var(--accent);
   outline-offset: 1px;
 }

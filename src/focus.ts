@@ -1,13 +1,12 @@
-import '@fontsource-variable/fraunces';
-import '@fontsource-variable/nunito';
+import '@fontsource-variable/inter';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { addTodo, removeTodo, setIntention, toggleTodo } from './actions';
+import { addTask, removeTask, setIntention, toggleTask } from './actions';
 import { chime, unlockAudioOnClick } from './alerts';
 import { startFlock } from './birds';
 import { h } from './dom';
-import { type Snapshot, dayRecord, snapshot } from './engine';
-import { type Ambient, formatClock, formatDuration } from './model';
+import { type Snapshot, blockTasks, dayRecord, snapshot } from './engine';
+import { type Ambient, type Task, formatClock, formatDuration } from './model';
 import { CIRCUMFERENCE, RING_R, ringColor, ringRemaining, ringText } from './ring';
 import { AMBIENT_LABELS, playAmbient, setAmbientVolume, stopAmbient } from './sounds';
 import { getState, inTauri, initStore, subscribe, update } from './store';
@@ -54,7 +53,8 @@ function renderFocusStage(s: Snapshot) {
   const rec = dayRecord(getState(), s.key);
   const block = s.current && !s.awaitingStart ? s.current : null;
   const intention = block ? rec.intentions[block.id] : undefined;
-  const key = `${s.key}:${s.current?.id ?? ''}:${s.awaitingStart}:${s.next?.id ?? ''}:${JSON.stringify(intention ?? null)}`;
+  const tasks = block ? blockTasks(getState(), s.key, block.id) : [];
+  const key = `${s.key}:${s.current?.id ?? ''}:${s.awaitingStart}:${s.next?.id ?? ''}:${JSON.stringify([intention ?? null, tasks])}`;
   if (key !== structureKey) {
     // Fade in on arrival only, not every time a to-do is ticked
     const arriving = structureKey === '';
@@ -68,7 +68,7 @@ function renderFocusStage(s: Snapshot) {
         h('h1', {}, s.current?.name ?? (s.next ? 'A breather' : 'All done for today')),
         bigRing(),
         untilEl,
-        block ? intentionEditor(s.key, block.id, intention?.text ?? '', intention?.todos ?? []) : freeTimeNote(s),
+        block ? intentionEditor(s.key, block.id, intention?.text ?? '', tasks) : freeTimeNote(s),
       ),
     );
     if (refocusAdd) {
@@ -94,7 +94,7 @@ function updateRing(s: Snapshot) {
   }
 }
 
-function intentionEditor(key: string, id: string, text: string, todos: { id: string; text: string; done: boolean }[]) {
+function intentionEditor(key: string, id: string, text: string, tasks: Task[]) {
   const add = h('input', {
     class: 'todo-add',
     placeholder: '+ Add a to-do and press Enter',
@@ -102,7 +102,7 @@ function intentionEditor(key: string, id: string, text: string, todos: { id: str
       if (e.key !== 'Enter') return;
       const input = e.target as HTMLInputElement;
       refocusAdd = true;
-      void addTodo(key, id, input.value);
+      void addTask(key, input.value, { blockId: id });
     },
   });
   return h(
@@ -118,12 +118,13 @@ function intentionEditor(key: string, id: string, text: string, todos: { id: str
     h(
       'ul',
       { class: 'todos' },
-      todos.map((t) =>
+      tasks.map((t) =>
         h(
           'li',
           { class: t.done ? 'done' : '' },
-          h('label', {}, h('input', { type: 'checkbox', checked: t.done, onChange: () => toggleTodo(key, id, t.id) }), h('span', {}, t.text)),
-          h('button', { class: 'remove', title: 'Remove', onClick: () => removeTodo(key, id, t.id) }, '×'),
+          h('label', {}, h('input', { type: 'checkbox', checked: t.done, onChange: () => toggleTask(t.id) }), h('span', {}, t.title)),
+          t.estimateMin > 0 && h('span', { class: 'estimate' }, formatDuration(t.estimateMin * 60_000)),
+          h('button', { class: 'remove', title: 'Remove', onClick: () => removeTask(t.id) }, '×'),
         ),
       ),
     ),

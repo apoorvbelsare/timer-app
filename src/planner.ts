@@ -1,15 +1,15 @@
-import '@fontsource-variable/fraunces';
-import '@fontsource-variable/nunito';
+import '@fontsource-variable/inter';
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as autostartEnabled } from '@tauri-apps/plugin-autostart';
-import { emit } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { Window } from '@tauri-apps/api/window';
-import { addTodo, ensureDay, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, toggleTodo } from './actions';
+import { addTask, ensureDay, logBlock, restoreToday, setIntention, setNote, skipToday, startBlock } from './actions';
 import { chime, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
-import { type Planned, dayRecord, planFor, planOverlap, routineOverlap, snapshot } from './engine';
+import { type Planned, blockTasks, dayRecord, planFor, planOverlap, routineOverlap, shutdownDue, snapshot, tasksOn, workload } from './engine';
 import {
   type Block,
   type BlockStatus,
+  weekKey,
   DAY_NAMES,
   PALETTE,
   daysLabel,
@@ -21,10 +21,13 @@ import {
   sampleRoutine,
   toMinutes,
 } from './model';
+import { renderPlan, renderShutdown, resetPlan, resetShutdown } from './planner/rituals';
+import { addTaskRow, blockFill, dropZone, field, formatMinutes, keepFocus, restoreFocus, swatches, taskRow, timeInput, workloadBar } from './planner/ui';
+import { renderWeek } from './planner/week';
 import { getState, inTauri, initStore, subscribe, update } from './store';
 import './styles/planner.css';
 
-type View = 'today' | 'routine' | 'settings';
+type View = 'today' | 'plan' | 'shutdown' | 'week' | 'routine' | 'settings';
 
 const viewEl = document.getElementById('view')!;
 let view: View = 'today';
@@ -34,39 +37,33 @@ let routineDraft: Block | null = null;
 let error = '';
 
 function go(next: View) {
+  if (next === 'plan' && view !== 'plan') resetPlan();
+  if (next === 'shutdown' && view !== 'shutdown') resetShutdown();
   view = next;
   error = '';
   render();
 }
 
+const ritualContext = { rerender: () => render(), done: () => go('today'), openWeek: () => go('week') };
+
 function render() {
-  document.querySelectorAll<HTMLButtonElement>('.nav button[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
-  const scroll = viewEl.querySelector('.timeline-scroll')?.scrollTop;
-  viewEl.replaceChildren(view === 'today' ? renderToday() : view === 'routine' ? renderRoutine() : renderSettings());
-  const timeline = viewEl.querySelector('.timeline-scroll');
-  if (timeline && scroll !== undefined) timeline.scrollTop = scroll;
-}
-
-const field = (label: string, ...control: (Node | string)[]) => h('label', { class: 'field' }, h('span', {}, label), ...control);
-
-function timeInput(value: string, onChange: (v: string) => void) {
-  return h('input', { type: 'time', value, onChange: (e: Event) => onChange((e.target as HTMLInputElement).value) });
-}
-
-function swatches(current: string, onPick: (c: string) => void) {
-  return h(
-    'div',
-    { class: 'swatches' },
-    PALETTE.map((c) =>
-      h('button', {
-        type: 'button',
-        class: `swatch${c === current ? ' on' : ''}`,
-        style: `background:${c}`,
-        title: c,
-        onClick: () => onPick(c),
-      }),
-    ),
-  );
+  const navView = view === 'plan' || view === 'shutdown' ? 'today' : view;
+  document.querySelectorAll<HTMLButtonElement>('.nav button[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === navView));
+  const scrolls = [...viewEl.querySelectorAll<HTMLElement>('[data-keep-scroll]')].map((el) => [el.dataset.keepScroll, el.scrollTop] as const);
+  const pages: Record<View, () => HTMLElement> = {
+    today: renderToday,
+    plan: () => renderPlan(ritualContext),
+    shutdown: () => renderShutdown(ritualContext),
+    week: renderWeek,
+    routine: renderRoutine,
+    settings: renderSettings,
+  };
+  viewEl.replaceChildren(pages[view]());
+  for (const [name, top] of scrolls) {
+    const el = viewEl.querySelector<HTMLElement>(`[data-keep-scroll="${name}"]`);
+    if (el) el.scrollTop = top;
+  }
+  restoreFocus(viewEl);
 }
 
 const errorBox = () => (error ? h('p', { class: 'error' }, error) : null);
@@ -84,17 +81,18 @@ function renderToday(): HTMLElement {
   const rec = dayRecord(state, key);
   const plan = planFor(state, date, true);
   const live = snapshot(state, now);
-  const plannedMs = plan.filter((p) => !p.skippedToday).reduce((sum, p) => sum + (p.endMs - p.startMs), 0);
+  const load = workload(state, date);
 
   const blockEl = (p: Planned) => {
     const status = rec.log[p.id];
     const top = toMinutes(p.start) * PX_PER_MIN;
     const height = Math.max(22, (toMinutes(p.end) - toMinutes(p.start)) * PX_PER_MIN);
+    const tasks = blockTasks(state, key, p.id);
     const classes = ['tl-block'];
     if (p.skippedToday) classes.push('skipped');
     if (p.id === selectedToday) classes.push('selected');
     if (live.current?.id === p.id) classes.push('current');
-    return h(
+    const el = h(
       'button',
       {
         class: classes.join(' '),
@@ -108,6 +106,7 @@ function renderToday(): HTMLElement {
       },
       h('span', { class: 'tl-name' }, p.name),
       h('span', { class: 'tl-time' }, `${p.start}–${p.end}`),
+      tasks.length > 0 && h('span', { class: 'tl-tasks' }, `${tasks.filter((t) => t.done).length}/${tasks.length} tasks`),
       h(
         'span',
         { class: 'tags' },
@@ -117,6 +116,7 @@ function renderToday(): HTMLElement {
         status && h('span', { class: `tag status-${status}` }, STATUS_LABEL[status]),
       ),
     );
+    return p.skippedToday ? el : dropZone(el, p.id);
   };
 
   const timeline = h(
@@ -129,16 +129,26 @@ function renderToday(): HTMLElement {
     h('div', { class: 'now-line', style: `top:${minuteOfDay(now) * PX_PER_MIN}px` }),
   );
 
-  const scroller = h('div', { class: 'timeline-scroll' }, timeline);
+  const scroller = h('div', { class: 'timeline-scroll', 'data-keep-scroll': 'timeline' }, timeline);
   requestAnimationFrame(() => {
-    if (!scroller.dataset.placed) {
+    if (!scroller.dataset.placed && scroller.scrollTop === 0) {
       scroller.dataset.placed = '1';
       scroller.scrollTop = Math.max(0, (minuteOfDay(now) - 120) * PX_PER_MIN);
     }
   });
 
   const selected = plan.find((p) => p.id === selectedToday) ?? null;
-  const side = oneOffDraft ? renderOneOffForm(key) : selected ? renderTodayDetail(selected, key, now) : renderTodayHint(plan.length);
+  const drawer = oneOffDraft ? renderOneOffForm(key) : selected ? renderTodayDetail(selected, key, now) : null;
+  const closeDrawer = () => ((selectedToday = null), (oneOffDraft = null), (error = ''), render());
+
+  // The day's ritual, whichever fits the moment
+  const ritualButton = rec.shutdown
+    ? h('button', { class: 'btn ghost', onClick: () => go('shutdown') }, 'Day closed')
+    : shutdownDue(state, now)
+      ? h('button', { class: 'btn primary', onClick: () => go('shutdown') }, 'Close the day')
+      : !rec.planned
+        ? h('button', { class: 'btn primary', onClick: () => go('plan') }, 'Plan your day')
+        : h('button', { class: 'btn ghost', onClick: () => go('shutdown') }, 'Close the day');
 
   return h(
     'section',
@@ -146,42 +156,85 @@ function renderToday(): HTMLElement {
     h(
       'header',
       { class: 'page-head' },
-      h('div', {}, h('h1', {}, 'Today'), h('p', { class: 'sub' }, `${date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' })} · ${formatDuration(plannedMs)} planned`)),
+      h('div', {}, h('h1', {}, 'Today'), h('p', { class: 'sub' }, date.toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'long' }))),
       h(
-        'button',
-        {
-          class: 'btn',
-          onClick: () => {
-            const start = Math.ceil(minuteOfDay(now) / 5) * 5;
-            oneOffDraft = {
-              id: newId(),
-              name: '',
-              color: PALETTE[4],
-              start: fromMinutes(Math.min(start, 23 * 60)),
-              end: fromMinutes(Math.min(start + 30, 23 * 60 + 59)),
-              days: [],
-              optional: false,
-              steps: [],
-            };
-            selectedToday = null;
-            error = '';
-            render();
+        'div',
+        { class: 'row' },
+        h(
+          'button',
+          {
+            class: 'btn ghost',
+            onClick: () => {
+              const start = Math.ceil(minuteOfDay(now) / 5) * 5;
+              oneOffDraft = {
+                id: newId(),
+                name: '',
+                color: PALETTE[4],
+                start: fromMinutes(Math.min(start, 23 * 60)),
+                end: fromMinutes(Math.min(start + 30, 23 * 60 + 59)),
+                days: [],
+                optional: false,
+                steps: [],
+              };
+              selectedToday = null;
+              error = '';
+              render();
+            },
           },
-        },
-        '+ Just for today',
+          '+ Block just for today',
+        ),
+        ritualButton,
       ),
     ),
-    h('div', { class: 'split' }, scroller, h('aside', { class: 'panel' }, side)),
+    h(
+      'div',
+      { class: 'today-grid' },
+      renderTaskColumn(key, plan.filter((p) => !p.skippedToday), load),
+      h(
+        'div',
+        { class: 'timeline-wrap' },
+        scroller,
+        drawer && h('aside', { class: 'drawer' }, h('button', { class: 'icon drawer-close', title: 'Close', onClick: closeDrawer }, '×'), drawer),
+      ),
+    ),
   );
 }
 
-function renderTodayHint(count: number) {
+/** Sunsama's left column: the day's tasks, grouped by the block they live in. */
+function renderTaskColumn(key: string, blocks: Planned[], load: ReturnType<typeof workload>) {
+  const state = getState();
+  const tasks = tasksOn(state, key);
+  const objectives = state.objectives.filter((o) => o.week === weekKey(key));
+  const unscheduled = tasks.filter((t) => !t.blockId || !blocks.some((b) => b.id === t.blockId));
+  const groups = load.blocks.filter((b) => !b.block.skippedToday && tasks.some((t) => t.blockId === b.block.id));
+
   return h(
     'div',
-    { class: 'hint' },
-    count
-      ? h('p', {}, 'Pick a block to log it, skip it, or move it. Changes here only affect today; your routine stays as it is.')
-      : h('div', {}, h('p', {}, 'Nothing planned today.'), h('button', { class: 'btn', onClick: () => go('routine') }, 'Set up your routine')),
+    { class: 'task-column', 'data-keep-scroll': 'tasks' },
+    workloadBar(load, true),
+    addTaskRow(key, 'today-add'),
+    groups.map(({ block, taskMin, blockMin }) =>
+      dropZone(
+        h(
+          'div',
+          { class: 'task-group', style: `--c:${block.color}` },
+          h('div', { class: 'group-head' }, h('span', { class: 'dot' }), h('strong', {}, block.name), h('span', { class: 'sub' }, block.start), blockFill(taskMin, blockMin)),
+          h('ul', { class: 'task-list' }, tasks.filter((t) => t.blockId === block.id).map((t) => taskRow(t, { draggable: true, objectives, objectivePicker: false }))),
+        ),
+        block.id,
+      ),
+    ),
+    dropZone(
+      h(
+        'div',
+        { class: 'task-group inbox' },
+        h('div', { class: 'group-head' }, h('strong', {}, 'Not scheduled'), load.unscheduledMin > 0 && h('span', { class: 'sub' }, formatMinutes(load.unscheduledMin))),
+        unscheduled.length
+          ? h('ul', { class: 'task-list' }, unscheduled.map((t) => taskRow(t, { draggable: true, objectives, objectivePicker: false })))
+          : h('p', { class: 'sub small' }, tasks.length ? 'Drag a task onto a block in the timeline to give it a home.' : 'No tasks yet. Add one above, or plan your day.'),
+      ),
+      null,
+    ),
   );
 }
 
@@ -198,23 +251,16 @@ function ritualGroup(p: Planned, key: string, ended: boolean) {
       placeholder: 'What do you want to get done?',
       onChange: (e: Event) => setIntention(key, p.id, (e.target as HTMLInputElement).value),
     }),
-    intention?.todos.length
-      ? h(
-          'ul',
-          { class: 'todo-list' },
-          intention.todos.map((t) =>
-            h(
-              'li',
-              {},
-              h('label', { class: 'check' }, h('input', { type: 'checkbox', checked: t.done, onChange: () => toggleTodo(key, p.id, t.id) }), h('span', { class: t.done ? 'struck' : '' }, t.text)),
-              h('button', { class: 'icon', title: 'Remove', onClick: () => removeTodo(key, p.id, t.id) }, '×'),
-            ),
-          ),
-        )
-      : null,
+    h('h3', {}, 'Tasks'),
+    h('ul', { class: 'task-list' }, blockTasks(getState(), key, p.id).map((t) => taskRow(t))),
     h('input', {
-      placeholder: '+ Add a to-do and press Enter',
-      onKeydown: (e: KeyboardEvent) => e.key === 'Enter' && addTodo(key, p.id, (e.target as HTMLInputElement).value),
+      placeholder: '+ Add a task to this block',
+      'data-focus': `block-add-${p.id}`,
+      onKeydown: (e: KeyboardEvent) => {
+        if (e.key !== 'Enter') return;
+        keepFocus(`block-add-${p.id}`);
+        void addTask(key, (e.target as HTMLInputElement).value, { blockId: p.id, estimateMin: 30 });
+      },
     }),
     ended &&
       h(
@@ -614,6 +660,35 @@ function renderSettings(): HTMLElement {
       h(
         'div',
         { class: 'setting' },
+        h('div', {}, h('h3', {}, 'Morning planning'), h('p', { class: 'sub' }, 'Open the planner on “Plan your day” the first time you look at it each day.')),
+        h('input', { type: 'checkbox', checked: settings.morningPlanning, onChange: (e: Event) => update((d) => void (d.settings.morningPlanning = (e.target as HTMLInputElement).checked)) }),
+      ),
+      h(
+        'div',
+        { class: 'setting' },
+        h('div', {}, h('h3', {}, 'Close the day at'), h('p', { class: 'sub' }, 'When the widget suggests the evening shutdown ritual.')),
+        h('input', { type: 'time', class: 'narrow', value: settings.shutdownTime, onChange: (e: Event) => update((d) => void (d.settings.shutdownTime = (e.target as HTMLInputElement).value || '21:30')) }),
+      ),
+      h(
+        'div',
+        { class: 'setting' },
+        h('div', {}, h('h3', {}, 'A full day of tasks'), h('p', { class: 'sub' }, 'Hours of task work you can realistically do. Planning more than this shows a warning.')),
+        h('input', {
+          type: 'number',
+          min: '1',
+          max: '16',
+          step: '0.5',
+          class: 'narrow',
+          value: String(settings.capacityMin / 60),
+          onChange: (e: Event) => {
+            const hours = Math.min(16, Math.max(1, Number((e.target as HTMLInputElement).value) || 6));
+            void update((d) => void (d.settings.capacityMin = Math.round(hours * 60)));
+          },
+        }),
+      ),
+      h(
+        'div',
+        { class: 'setting' },
         h('div', {}, h('h3', {}, 'Start with Windows'), h('p', { class: 'sub' }, inTauri ? 'Open the widget when you sign in.' : 'Available in the desktop app.')),
         autostart,
       ),
@@ -637,7 +712,18 @@ function fail(message: string) {
 async function main() {
   await initStore();
   unlockAudioOnClick();
-  view = getState().routine.length ? 'today' : 'routine';
+  const state = getState();
+  const today = dayRecord(state, dayKey(new Date()));
+  const fromHash = location.hash.slice(1);
+  view = ['today', 'plan', 'shutdown', 'week'].includes(fromHash)
+    ? (fromHash as View)
+    : !state.routine.length
+      ? 'routine'
+      : state.settings.morningPlanning && !today.planned && !today.shutdown
+        ? 'plan'
+        : 'today';
+  // The widget's ritual nudges open the planner on a specific view
+  if (inTauri) await listen<View>('planner-view', (e) => go(e.payload));
   document.querySelectorAll<HTMLButtonElement>('.nav button[data-view]').forEach((b) => b.addEventListener('click', () => go(b.dataset.view as View)));
   document.getElementById('open-focus')!.addEventListener('click', async () => {
     if (!inTauri) return void window.open('/focus.html', 'focus');

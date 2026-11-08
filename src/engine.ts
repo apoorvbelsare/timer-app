@@ -2,8 +2,10 @@ import {
   type AppState,
   type Block,
   type DayRecord,
+  type Objective,
   type Settings,
   type Step,
+  type Task,
   atMinutes,
   dayKey,
   emptyDay,
@@ -222,4 +224,67 @@ export function routineOverlap(routine: Block[], candidate: Block): { block: Blo
 /** First block in a day's plan that `candidate` would collide with. */
 export function planOverlap(plan: Planned[], candidate: Span): Planned | null {
   return plan.find((p) => p.id !== candidate.id && overlaps(candidate, p)) ?? null;
+}
+
+// ── Tasks, workload and rituals ──────────────────────────────────────────────
+
+/** The day's tasks, in the order they were added. Let-go tasks are left out. */
+export function tasksOn(state: AppState, key: string): Task[] {
+  return state.tasks.filter((t) => t.date === key && !t.dropped);
+}
+
+export function blockTasks(state: AppState, key: string, blockId: string): Task[] {
+  return tasksOn(state, key).filter((t) => t.blockId === blockId);
+}
+
+export interface BlockLoad {
+  block: Planned;
+  taskMin: number;
+  blockMin: number;
+}
+
+export interface Workload {
+  /** Estimated minutes of every task planned for the day */
+  taskMin: number;
+  capacityMin: number;
+  blocks: BlockLoad[];
+  unscheduledMin: number;
+}
+
+/**
+ * How much is planned against how much fits. People with ADHD tend to overplan,
+ * so the planner shows this wherever tasks are added.
+ */
+export function workload(state: AppState, date: Date): Workload {
+  const key = dayKey(date);
+  const tasks = tasksOn(state, key);
+  const sum = (list: Task[]) => list.reduce((total, t) => total + t.estimateMin, 0);
+  const blocks = planFor(state, date).map((block) => ({
+    block,
+    taskMin: sum(tasks.filter((t) => t.blockId === block.id)),
+    blockMin: (block.endMs - block.startMs) / 60_000,
+  }));
+  const placed = new Set(blocks.map((b) => b.block.id));
+  return {
+    taskMin: sum(tasks),
+    capacityMin: state.settings.capacityMin,
+    blocks,
+    unscheduledMin: sum(tasks.filter((t) => !t.blockId || !placed.has(t.blockId))),
+  };
+}
+
+/** Unfinished tasks from earlier days that haven't been brought forward or let go. */
+export function carryover(state: AppState, key: string): Task[] {
+  return state.tasks.filter((t) => t.date < key && !t.done && !t.dropped);
+}
+
+export function shutdownDue(state: AppState, now: number): boolean {
+  const date = new Date(now);
+  const rec = dayRecord(state, dayKey(date));
+  return rec.shutdown === null && now >= atMinutes(date, toMinutes(state.settings.shutdownTime));
+}
+
+export function objectiveProgress(state: AppState, objective: Objective): { done: number; total: number } {
+  const linked = state.tasks.filter((t) => t.objectiveId === objective.id && !t.dropped);
+  return { done: linked.filter((t) => t.done).length, total: linked.length };
 }

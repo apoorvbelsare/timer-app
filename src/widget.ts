@@ -1,5 +1,4 @@
-import '@fontsource-variable/fraunces';
-import '@fontsource-variable/nunito';
+import '@fontsource-variable/inter';
 import { enable as enableAutostart } from '@tauri-apps/plugin-autostart';
 import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { emit } from '@tauri-apps/api/event';
@@ -7,7 +6,7 @@ import { Window, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window
 import { dismissIntention, logBlock, setIntention, skipToday, snooze, startBlock } from './actions';
 import { chime, notify, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
-import { type Snapshot, dayRecord, escalation, snapshot } from './engine';
+import { type Snapshot, blockTasks, dayRecord, escalation, shutdownDue, snapshot } from './engine';
 import type { FocusMode } from './focus';
 import { formatDuration, minuteOfDay } from './model';
 import { CIRCUMFERENCE, ringColor, ringRemaining, ringText } from './ring';
@@ -26,15 +25,18 @@ const extrasEl = $('extras');
 
 const win = inTauri ? getCurrentWindow() : null;
 
-async function openPlanner() {
+type PlannerView = 'today' | 'plan' | 'shutdown';
+
+async function openPlanner(view?: PlannerView) {
   if (!inTauri) {
-    window.open('/planner.html', 'planner');
+    window.open(`/planner.html${view ? `#${view}` : ''}`, 'planner');
     return;
   }
   const planner = await Window.getByLabel('planner');
   await planner?.show();
   await planner?.unminimize();
   await planner?.setFocus();
+  if (view) await emit('planner-view', view);
 }
 
 async function openFocus(mode: FocusMode = 'focus') {
@@ -69,12 +71,13 @@ function render(s: Snapshot) {
   } else if (s.current && s.awaitingStart) {
     setText(s.current.name, 'Optional · start when you’re ready', `until ${s.current.end}`, nextLine);
   } else if (s.current) {
-    // A running step wins; otherwise remind them what they meant to do
+    // A running step wins, then what they meant to do, then the next open task
     const intention = dayRecord(state, s.key).intentions[s.current.id]?.text;
+    const nextTask = blockTasks(state, s.key, s.current.id).find((t) => !t.done)?.title;
     const step = s.step
       ? `${s.step.step.name} · ${formatDuration(s.step.remainingMs)} (${s.step.index + 1}/${s.current.steps.length})`
-      : intention
-        ? `→ ${intention}`
+      : intention || nextTask
+        ? `→ ${intention || nextTask}`
         : '';
     setText(s.current.name, step, `${formatDuration(s.remainingMs)} left · until ${s.current.end}`, nextLine);
   } else if (s.next) {
@@ -124,22 +127,37 @@ function renderStrip(s: Snapshot) {
   );
 }
 
-/** Free time with room to spare is a good moment for a recharge break. */
-let extrasShown = false;
+/**
+ * One gentle nudge at a time, under the strip: close the day, plan it, or take
+ * a recharge break when free time has room to spare.
+ */
+let extrasShown = '';
 function renderExtras(s: Snapshot) {
-  const show = !s.current && !!s.next && s.remainingMs > 3 * 60_000 && !s.prompt;
-  if (show === extrasShown) return;
-  extrasShown = show;
-  extrasEl.hidden = !show;
-  extrasEl.replaceChildren(
-    ...(show
-      ? [
-          h('span', {}, 'Recharge'),
-          h('button', { class: 'chip', onClick: () => openFocus('breathe') }, 'Breathe · 2 min'),
-          h('button', { class: 'chip', onClick: () => openFocus('stretch') }, 'Stretch · 3 min'),
-        ]
-      : []),
-  );
+  const state = getState();
+  const rec = dayRecord(state, s.key);
+  const kind = s.prompt
+    ? ''
+    : shutdownDue(state, s.now)
+      ? 'shutdown'
+      : state.settings.morningPlanning && !rec.planned && rec.shutdown === null && s.plan.length > 0
+        ? 'plan'
+        : !s.current && s.next && s.remainingMs > 3 * 60_000
+          ? 'recharge'
+          : '';
+  if (kind === extrasShown) return;
+  extrasShown = kind;
+  extrasEl.hidden = !kind;
+  const content = {
+    '': [],
+    shutdown: [h('span', {}, 'Evening'), h('button', { class: 'chip accent', onClick: () => openPlanner('shutdown') }, 'Close the day')],
+    plan: [h('span', {}, 'Morning'), h('button', { class: 'chip accent', onClick: () => openPlanner('plan') }, 'Plan your day · 3 min')],
+    recharge: [
+      h('span', {}, 'Recharge'),
+      h('button', { class: 'chip', onClick: () => openFocus('breathe') }, 'Breathe · 2 min'),
+      h('button', { class: 'chip', onClick: () => openFocus('stretch') }, 'Stretch · 3 min'),
+    ],
+  }[kind];
+  extrasEl.replaceChildren(...content);
 }
 
 let promptKey = '';
@@ -250,6 +268,12 @@ function alerts(s: Snapshot) {
   const stepKey = s.step ? `${currentKey}:${s.step.index}` : '';
   if (booted && stepKey && stepKey !== lastStep && s.step!.index > 0 && settings.chime) chime('step');
   lastStep = stepKey;
+
+  if (shutdownDue(state, s.now) && !fired.has(`${s.key}:shutdown`)) {
+    fired.add(`${s.key}:shutdown`);
+    notify('Time to close the day', 'A few minutes to see what got done and set tomorrow up.');
+    sound();
+  }
 
   // The hyperfocus guard: card → toast → overlay
   const p = s.prompt;

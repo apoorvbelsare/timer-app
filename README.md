@@ -15,6 +15,11 @@ A visual routine timer for ADHD brains. It sits in the corner of your screen all
   - *Before:* when a block starts, the widget asks for your intention. Not now is always fine.
   - *During:* focus mode gives a big ring, your intention and to-dos, and a small flock of birds drifting overhead for company. You can add ambient rain, forest or brown noise, all generated in the app.
   - *After:* the "How did it go?" card takes a one-line note.
+- **Tasks and timeboxing.** Inspired by Sunsama. Add the day's tasks with rough time estimates, then drag each one into the block where you'll do it. A block's tasks are its to-dos in the widget and focus mode.
+- **Overplanning warning.** A workload bar compares planned task time with a realistic day (6 hours by default) and flags blocks packed past their length.
+- **Morning planning.** Three short steps: bring yesterday's unfinished tasks forward or let them go, add today's tasks, give each one a home.
+- **Evening shutdown.** At a set time (21:30 by default): see what got done, move what's left to tomorrow or let it go, and write one line about the day.
+- **Weekly objectives.** One to three goals for the week. Tasks link to them, and a review opens from Friday with your daily reflections.
 - **Recharge breaks.** A 2-minute guided breathing exercise and a 3-minute stretch sequence, offered in free time between blocks.
 - **Tray app.** Lives in the system tray and starts with Windows. The tray menu can hide the widget or lock it so clicks pass through.
 
@@ -44,7 +49,8 @@ npm run tauri build
 | `src/store.ts` | Loads and saves state through the Rust side and keeps windows in sync |
 | `src/widget.ts`, `planner.ts`, `overlay.ts`, `focus.ts` | The four windows |
 | `src/sounds.ts`, `birds.ts` | Synthesised ambient sound and the flock animation |
-| `src/styles/theme.css` | Shared palette and fonts (Fraunces + Nunito, bundled) |
+| `src/planner/` | Planner pieces: task rows and workload bar, the daily rituals, the week view |
+| `src/styles/theme.css` | Shared palette and font (Inter, bundled), light and dark |
 | `src-tauri/` | The Tauri shell: tray menu, state file, plugins |
 
 State is one JSON file at `%APPDATA%\com.apoorvbelsare.timer\state.json`.

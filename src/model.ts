@@ -27,16 +27,36 @@ export interface DayOverride {
   extra: Block[];
 }
 
-export interface Todo {
+/**
+ * One thing to get done on a given day. Placing it in a block makes it one of
+ * that block's to-dos (Sunsama calls this timeboxing).
+ */
+export interface Task {
   id: string;
-  text: string;
+  title: string;
+  /** Day the task is planned for, as a day key */
+  date: string;
+  /** Rough size in minutes; 0 means "not estimated" */
+  estimateMin: number;
+  blockId: string | null;
+  objectiveId: string | null;
+  done: boolean;
+  /** Let go of during a ritual: kept for the record, never carried over again */
+  dropped: boolean;
+}
+
+/** A goal for the week; tasks can count towards it. */
+export interface Objective {
+  id: string;
+  /** Monday of the week, as a day key */
+  week: string;
+  title: string;
   done: boolean;
 }
 
 /** What the person means to do in a block: the "before" of the session ritual. */
 export interface Intention {
   text: string;
-  todos: Todo[];
   /** Skipped the question; don't ask again for this block today */
   dismissed: boolean;
 }
@@ -51,6 +71,10 @@ export interface DayRecord {
   intentions: Record<string, Intention>;
   /** One line on how a block went: the "after" of the ritual */
   notes: Record<string, string>;
+  /** Went through the morning planning ritual */
+  planned: boolean;
+  /** Went through the evening shutdown ritual */
+  shutdown: { at: number; reflection: string } | null;
 }
 
 export type Ambient = 'off' | 'rain' | 'forest' | 'brown';
@@ -67,6 +91,12 @@ export interface Settings {
   autostartConfigured: boolean;
   ambient: Ambient;
   ambientVolume: number;
+  /** Open the planning ritual the first time the planner opens each day */
+  morningPlanning: boolean;
+  /** "HH:MM" when the shutdown ritual is offered */
+  shutdownTime: string;
+  /** Minutes of task work that makes a full day; beyond this the day is overplanned */
+  capacityMin: number;
 }
 
 export interface AppState {
@@ -74,10 +104,14 @@ export interface AppState {
   routine: Block[];
   settings: Settings;
   days: Record<string, DayRecord>;
+  tasks: Task[];
+  objectives: Objective[];
+  /** Weekly review notes, keyed by the week's Monday */
+  weekNotes: Record<string, string>;
 }
 
-/** Earthy tones: sage, clay, ochre, dusk, heather, lake, rose, moss */
-export const PALETTE = ['#7fa88b', '#d08a5f', '#e2b25c', '#8f9fd1', '#b08cc0', '#6fb3b8', '#d9879a', '#a3b86c'];
+/** Morning-light tones: apricot, sky, mint, lilac, sun, blush, lagoon, slate */
+export const PALETTE = ['#f4a261', '#7aa6f0', '#7cc4a0', '#b997e6', '#f0c45a', '#f08fa0', '#5fc0c4', '#9aa7ba'];
 
 export const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
@@ -93,11 +127,14 @@ export function defaultSettings(): Settings {
     autostartConfigured: false,
     ambient: 'off',
     ambientVolume: 0.5,
+    morningPlanning: true,
+    shutdownTime: '21:30',
+    capacityMin: 6 * 60,
   };
 }
 
 export function defaultState(): AppState {
-  return { version: 1, routine: [], settings: defaultSettings(), days: {} };
+  return { version: 1, routine: [], settings: defaultSettings(), days: {}, tasks: [], objectives: [], weekNotes: {} };
 }
 
 export function emptyDay(): DayRecord {
@@ -108,21 +145,35 @@ export function emptyDay(): DayRecord {
     snoozedUntil: {},
     intentions: {},
     notes: {},
+    planned: false,
+    shutdown: null,
   };
 }
 
 /** Fills in anything an older or hand-edited state file is missing. */
 export function normalizeState(raw: Partial<AppState>): AppState {
   const days: Record<string, DayRecord> = {};
+  const tasks: Task[] = [...(raw.tasks ?? [])];
   for (const [key, rec] of Object.entries(raw.days ?? {})) {
     const empty = emptyDay();
     days[key] = { ...empty, ...rec, override: { ...empty.override, ...rec?.override } };
+    // Block to-dos used to live inside intentions; they're tasks now
+    for (const [blockId, intention] of Object.entries(days[key].intentions)) {
+      const legacy = (intention as Intention & { todos?: { id: string; text: string; done: boolean }[] }).todos ?? [];
+      for (const todo of legacy) {
+        tasks.push({ id: todo.id, title: todo.text, date: key, estimateMin: 0, blockId, objectiveId: null, done: todo.done, dropped: false });
+      }
+      days[key].intentions[blockId] = { text: intention.text, dismissed: intention.dismissed };
+    }
   }
   return {
     version: 1,
     routine: raw.routine ?? [],
     settings: { ...defaultSettings(), ...raw.settings },
     days,
+    tasks,
+    objectives: raw.objectives ?? [],
+    weekNotes: raw.weekNotes ?? {},
   };
 }
 
@@ -130,6 +181,23 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 export function dayKey(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+export function fromDayKey(key: string): Date {
+  const [y, m, d] = key.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
+export function addDays(key: string, days: number): string {
+  const d = fromDayKey(key);
+  d.setDate(d.getDate() + days);
+  return dayKey(d);
+}
+
+/** The Monday that starts the week containing `key`. */
+export function weekKey(key: string): string {
+  const offset = (fromDayKey(key).getDay() + 6) % 7;
+  return addDays(key, -offset);
 }
 
 export function toMinutes(hhmm: string): number {

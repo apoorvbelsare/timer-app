@@ -1,5 +1,4 @@
-import '@fontsource-variable/fraunces';
-import '@fontsource-variable/nunito';
+import '@fontsource-variable/inter';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { logBlock, snooze } from './actions';
 import { h } from './dom';
