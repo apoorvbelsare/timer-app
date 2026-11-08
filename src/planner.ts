@@ -147,18 +147,9 @@ function renderToday(): HTMLElement {
         p.oneOff && h('span', { class: 'tag' }, 'today only'),
         p.movedToday && h('span', { class: 'tag' }, 'moved'),
         status && h('span', { class: `tag status-${status}` }, STATUS_LABEL[status]),
-        p.steps.length > 0 && h('span', { class: 'tag' }, `${Math.min(stepsDoneFor(p), p.steps.length)}/${p.steps.length} steps`),
       ),
-      // The steps themselves, as far down as the block has room for
-      p.steps.length > 0 &&
-        h(
-          'ol',
-          { class: 'tl-steps' },
-          p.steps.map((st, i) => h('li', { class: i < stepsDoneFor(p) ? 'done' : i === stepsDoneFor(p) && live.current?.id === p.id ? 'on' : '' }, st.name)),
-        ),
     );
   };
-  const stepsDoneFor = (p: Planned) => rec.stepsDone[p.id]?.length ?? 0;
 
   const timeline = h(
     'div',

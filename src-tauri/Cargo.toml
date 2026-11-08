@@ -1,6 +1,6 @@
 [package]
 name = "timer-app"
-version = "0.6.5"
+version = "0.6.6"
 description = "A visual routine timer built for ADHD brains"
 edition = "2021"
 
