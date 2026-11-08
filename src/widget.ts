@@ -192,9 +192,9 @@ function renderSteps(s: Snapshot) {
           'ol',
           { class: 'step-list' },
           block!.steps.map((step, i) => {
-            const state = i < done.length ? 'done' : i === done.length ? 'now' : 'later';
+            const state = i < done.length ? 'done' : i === done.length ? 'on' : 'later';
             // Tick the one you're on; untick only the last one ticked
-            const action = state === 'now' ? () => stepDone(s.key, id) : i === done.length - 1 ? () => stepUndo(s.key, id) : null;
+            const action = state === 'on' ? () => stepDone(s.key, id) : i === done.length - 1 ? () => stepUndo(s.key, id) : null;
             return h(
               'li',
               { class: state },
@@ -203,7 +203,7 @@ function renderSteps(s: Snapshot) {
                 {
                   class: 'tick',
                   disabled: !action,
-                  title: state === 'now' ? 'Done, next step' : action ? 'Not done yet' : '',
+                  title: state === 'on' ? 'Done, next step' : action ? 'Not done yet' : '',
                   'aria-label': state === 'done' ? `${step.name}, done` : step.name,
                   onClick: () => action?.(),
                 },
@@ -218,7 +218,7 @@ function renderSteps(s: Snapshot) {
     }
   }
   // The step you're on counts its guide time down, then up once it's over
-  const now = stepsEl.querySelector('li.now .guide');
+  const now = stepsEl.querySelector('li.on .guide');
   if (now && s.step) {
     now.textContent = stepGuide(s.step) || formatDuration(s.now - s.step.sinceMs);
     now.classList.toggle('over', (s.step.remainingMs ?? 1) <= 0);

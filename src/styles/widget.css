@@ -204,7 +204,7 @@ body {
 .seg.past {
   opacity: 0.3;
 }
-.now {
+.strip .now {
   position: absolute;
   top: -3px;
   width: 2px;
@@ -620,7 +620,7 @@ button:focus-visible {
   border-radius: 9px;
   font-size: 12.5px;
 }
-.step-list li.now {
+.step-list li.on {
   background: rgba(246, 241, 231, 0.08);
   font-weight: 700;
 }
@@ -647,11 +647,11 @@ button:focus-visible {
 .step-list .tick:not(:disabled) {
   cursor: pointer;
 }
-.step-list .now .tick {
+.step-list .on .tick {
   border-color: var(--step-accent);
   color: var(--step-accent);
 }
-.step-list .now .tick:hover {
+.step-list .on .tick:hover {
   background: var(--step-accent);
   color: var(--pine);
 }
