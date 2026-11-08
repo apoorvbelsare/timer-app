@@ -486,7 +486,7 @@ function renderBlockEditor(draft: Block): HTMLElement {
     const block: Block = {
       ...draft,
       name,
-      steps: draft.steps.filter((s) => s.name.trim() && s.minutes > 0).map((s) => ({ ...s, name: s.name.trim() })),
+      steps: draft.steps.filter((s) => s.name.trim()).map((s) => ({ ...s, name: s.name.trim(), minutes: Math.max(0, Math.round(s.minutes || 0)) })),
     };
     routineDraft = block;
     error = '';
@@ -545,26 +545,29 @@ function renderBlockEditor(draft: Block): HTMLElement {
       'div',
       { class: 'field' },
       h('span', {}, 'Steps (optional)'),
-      h('p', { class: 'sub small' }, 'Timed steps that move on by themselves: shower 15 min → get dressed 10 min.'),
+      h('p', { class: 'sub small' }, 'Steps in order, ticked off one by one on the widget: 1 shower → 2 get dressed → 3 breakfast. Minutes are an optional guide; nothing moves on until you tick it.'),
       draft.steps.map((s, i) =>
         h(
           'div',
           { class: 'step-row' },
+          h('span', { class: 'step-num' }, `${i + 1}.`),
           h('input', { value: s.name, placeholder: `Step ${i + 1}`, onInput: (e: Event) => (s.name = (e.target as HTMLInputElement).value) }),
           h('input', {
             type: 'number',
-            min: '1',
-            value: String(s.minutes),
+            min: '0',
+            value: s.minutes > 0 ? String(s.minutes) : '',
+            placeholder: '–',
+            title: 'Rough guide in minutes (optional)',
             class: 'minutes',
-            onChange: (e: Event) => ((s.minutes = Number((e.target as HTMLInputElement).value)), render()),
+            onChange: (e: Event) => ((s.minutes = Math.max(0, Number((e.target as HTMLInputElement).value) || 0)), render()),
           }),
           h('span', { class: 'unit' }, 'min'),
           h('button', { type: 'button', class: 'icon', title: 'Remove step', onClick: () => ((draft.steps = draft.steps.filter((x) => x !== s)), render()) }, '×'),
         ),
       ),
-      h('button', { type: 'button', class: 'btn ghost small', onClick: () => (draft.steps.push({ id: newId(), name: '', minutes: 5 }), render()) }, '+ Add step'),
-      draft.steps.length > 0 &&
-        h('p', { class: `sub small${stepsTotal > duration ? ' warn' : ''}` }, `Steps add up to ${stepsTotal} of ${Math.max(0, duration)} min${stepsTotal > duration ? '. The block ends before the last steps.' : ''}`),
+      h('button', { type: 'button', class: 'btn ghost small', onClick: () => (draft.steps.push({ id: newId(), name: '', minutes: 0 }), render()) }, '+ Add step'),
+      stepsTotal > 0 &&
+        h('p', { class: `sub small${stepsTotal > duration ? ' warn' : ''}` }, `Guide times add up to ${stepsTotal} of ${Math.max(0, duration)} min${stepsTotal > duration ? '. That’s more than the block’s length.' : ''}`),
     ),
     errorBox(),
     h(

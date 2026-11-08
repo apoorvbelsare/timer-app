@@ -6,7 +6,7 @@ Timer sits in the empty middle of your taskbar, or in a corner of your screen, a
 
 Everything stays on your PC. There's no account, no cloud and no tracking.
 
-> **`main` has the latest version of Timer (v0.6.1, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
+> **`main` has the latest version of Timer (v0.6.2, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
 
 ---
 
@@ -30,7 +30,7 @@ Many people with ADHD struggle to sense time passing (often called *time blindne
 
 ### See your time
 - **Always-on widget:** a small card that stays on top, wherever you drag it. It shows a ring that shrinks as the current block runs out, the block's name and current step, and what's next. The whole card takes on a deep shade of the current block's colour (purple for a purple Study block, deep blue for a blue evening block), so you can tell which zone you're in at a glance; free time goes back to forest green. The ring changes from the block's colour to amber to coral near the end.
-- **Taskbar dock:** the widget can sit inside the taskbar instead, as one wide bar in the empty middle. It shows everything the card does on a single line: ring, block, step or intention, time left, what's next, the day strip, and the Breathe / Stretch / Parked chips. Prompts open as a card just above it.
+- **Taskbar dock:** the widget can sit inside the taskbar instead, as one wide bar in the empty middle. It shows everything the card does on a single line: ring, block, step or intention, time left, what's next, the day strip, and the Breathe / Stretch / Parked chips. Prompts open as a card just above it, and the list button opens the block's steps there too.
   - **Drag the bar up** off the taskbar and it becomes the floating card again. **Drag the card onto the taskbar** and it docks. Drag the bar sideways to move it along the taskbar.
   - It stays above the taskbar when you click the taskbar, and hides while a fullscreen video, game or presentation is up.
   - It suits a taskbar with left-aligned icons (Settings → Personalization → Taskbar → Taskbar behaviors → Taskbar alignment: Left), so the middle is free.
@@ -38,7 +38,7 @@ Many people with ADHD struggle to sense time passing (often called *time blindne
 - **Hourly ping:** a short tune on every hour, different for each of the 24. Morning tunes rise and sound bright, afternoon tunes go up then down, and evening tunes fall low and soft. So even a tune you haven't learned yet tells you roughly what time it is. The widget glows for a moment and says the hour plus what's on ("3 pm · 40m left in Deep work"). It stays silent during quiet hours (10pm–7am by default).
 
 ### Plan your routine
-- **Routine blocks:** each block has a time, days of the week, and a colour. It can also have **timed steps** that move on by themselves (shower 15 min → get dressed 10 min → breakfast 15 min).
+- **Routine blocks:** each block has a time, days of the week, and a colour. It can also have **steps** in order (1 shower → 2 get dressed → 3 breakfast). The widget lists them all, numbered: tick the one you're on and the next one starts. Each step can have a rough guide time; when it runs out you get a nudge, but nothing moves on until you tick it.
 - **Optional blocks:** for things you don't do every day. Instead of starting on their own, they ask "Start or skip?", and skipping costs nothing.
 - **Overlapping blocks:** blocks can share the same time. The one that started most recently is shown in front, and the widget lists the others as "Also on". A 10:00 call inside a 9–12 Deep work block takes over for its half hour, then Deep work comes back. On the Today page, overlapping blocks sit side by side.
 - **Just for today:** skip, move or add a one-off block for today only. Your usual routine stays as it is.
@@ -101,7 +101,7 @@ If a `Timer_x.y.z_x64-setup.exe` is attached to the [Releases](https://github.co
    ```
 
 3. Run the installer it creates:
-   `src-tauri\target\release\bundle\nsis\Timer_0.6.1_x64-setup.exe`
+   `src-tauri\target\release\bundle\nsis\Timer_0.6.2_x64-setup.exe`
 
 After installing, **Timer** is in your Start menu, and it **starts with Windows** from the first launch. You can turn that off in Settings. To uninstall: **Windows Settings → Apps → Timer**.
 
@@ -118,7 +118,7 @@ Build or download the newer installer and run it over the old one. Your routine 
 1. The planner opens on **Routine**. Click **Start from a sample**, or **Add a block**.
 2. Edit the blocks to match your real day: click a block to change its name, time, days and colour.
 3. Tick **Optional** on anything you don't do every day, like Study or Gym.
-4. For routines with several parts (morning, wind-down), add **steps** with minutes. They'll move on by themselves.
+4. For routines with several parts (morning, wind-down), add **steps**. Tick them off on the widget as you go; minutes are optional.
 5. Glance at **Settings**: warning times, chime, the hyperfocus guard delay, hourly ping and its quiet hours.
 
 ### A normal day
@@ -126,7 +126,7 @@ Build or download the newer installer and run it over the old one. Your routine 
 | When | What happens | What you do |
 | --- | --- | --- |
 | A block starts | The widget asks for your intention | Type one thing, or click **Not now** |
-| During a block | The ring shrinks and steps move on | Open **Focus mode** (leaf icon or tray) for deep work |
+| During a block | The ring shrinks; tick steps off as you finish them | Open **Focus mode** (leaf icon or tray) for deep work |
 | A stray thought | You notice it pulling you away | **Ctrl + Shift + Space**, type, **Enter** |
 | On the hour | That hour's tune plays, and the widget says what's on | Nothing; it's just a time anchor |
 | 10 / 5 / 1 minutes left | A chime and a notification | Start wrapping up |
@@ -221,7 +221,7 @@ npm run tauri build   # build the Windows installer
 
 | Branch | What it is |
 | --- | --- |
-| `main` | **Use this one: the latest version (v0.6.1, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
+| `main` | **Use this one: the latest version (v0.6.2, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
 | `feat/taskbar-dock` | Where the taskbar dock was built; the same as `main` |
 | `feat/garden-parking-lot` | v0.3.0: Flown style plus the garden, parking lot and hourly ping |
 | `feat/flown-style` | The Flown-inspired version without those three additions |

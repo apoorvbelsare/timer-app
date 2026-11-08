@@ -6,7 +6,7 @@ import { addTodo, removeTodo, setIntention, toggleTodo } from './actions';
 import { chime, unlockAudioOnClick } from './alerts';
 import { startFlock } from './birds';
 import { h } from './dom';
-import { type Snapshot, dayRecord, snapshot } from './engine';
+import { type Snapshot, dayRecord, snapshot, stepGuide } from './engine';
 import { garden } from './garden';
 import { renderGarden } from './garden-view';
 import { type Ambient, formatClock, formatDuration } from './model';
@@ -89,7 +89,8 @@ function updateRing(s: Snapshot) {
   ringValue.textContent = value;
   ringUnit.textContent = unit;
   if (s.current) {
-    const step = s.step ? `${s.step.step.name} · ${formatDuration(s.step.remainingMs)} · ` : '';
+    const guide = s.step && stepGuide(s.step);
+    const step = s.step ? `Step ${s.step.index + 1}/${s.step.total} ${s.step.step.name}${guide ? ` · ${guide}` : ''} · ` : '';
     untilEl.textContent = `${step}until ${s.current.end}${s.next ? ` · then ${s.next.name}` : ''}`;
   } else {
     untilEl.textContent = s.next ? `${s.next.name} at ${s.next.start}` : '';

@@ -576,3 +576,106 @@ button:focus-visible {
 .docked.hour-pulse .bar {
   animation: hour-pulse 2.4s ease-out;
 }
+
+/* ── A block's steps: numbered, ticked off by hand ── */
+.steps {
+  --step-accent: var(--sage);
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+  cursor: default;
+}
+.zoned .steps {
+  --step-accent: color-mix(in srgb, var(--zone) 70%, var(--cream));
+}
+.step-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.step-list li {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 3px 6px;
+  border-radius: 9px;
+  font-size: 12.5px;
+}
+.step-list li.now {
+  background: rgba(246, 241, 231, 0.08);
+  font-weight: 700;
+}
+.step-list li.later {
+  color: var(--muted);
+}
+.step-list li.done .name {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.step-list .tick {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1.5px solid var(--line);
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  font: 700 10.5px var(--font-body);
+}
+.step-list .tick:not(:disabled) {
+  cursor: pointer;
+}
+.step-list .now .tick {
+  border-color: var(--step-accent);
+  color: var(--step-accent);
+}
+.step-list .now .tick:hover {
+  background: var(--step-accent);
+  color: var(--pine);
+}
+.step-list .done .tick {
+  border-color: var(--step-accent);
+  background: var(--step-accent);
+  color: var(--pine);
+}
+.step-list .name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.step-list .guide {
+  flex: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.step-list .guide.over {
+  color: var(--ochre);
+}
+/* Docked, the list opens above the bar as its own card */
+.docked .steps {
+  box-sizing: border-box;
+  order: -1;
+  width: 440px;
+  margin: 0 0 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  background: var(--bg);
+}
+.docked .steps[hidden] {
+  display: none;
+}
+#toggle-steps.on {
+  background: rgba(246, 241, 231, 0.12);
+  color: var(--text);
+}

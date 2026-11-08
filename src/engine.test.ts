@@ -62,18 +62,26 @@ describe('snapshot', () => {
     expect(snap.progress).toBeCloseTo(0.5);
   });
 
-  it('runs steps back to back and stops when they are used up', () => {
-    const withSteps = stateWith([
-      block('a', '08:00', '09:00', {
-        steps: [
-          { id: 's1', name: 'Shower', minutes: 15 },
-          { id: 's2', name: 'Dress', minutes: 10 },
+  it('goes through steps in order, only moving on when one is ticked off', () => {
+    const withSteps = (done: number[]) =>
+      stateWith(
+        [
+          block('a', '08:00', '09:00', {
+            steps: [
+              { id: 's1', name: 'Shower', minutes: 15 },
+              { id: 's2', name: 'Dress', minutes: 0 },
+              { id: 's3', name: 'Breakfast', minutes: 20 },
+            ],
+          }),
         ],
-      }),
-    ]);
-    expect(snapshot(withSteps, at('08:05')).step?.step.name).toBe('Shower');
-    expect(snapshot(withSteps, at('08:20')).step).toMatchObject({ index: 1, remainingMs: 5 * 60_000 });
-    expect(snapshot(withSteps, at('08:30')).step).toBeNull();
+        (st) => (st.days[KEY] = { ...emptyDay(), stepsDone: { a: done } }),
+      );
+    expect(snapshot(withSteps([]), at('08:05')).step).toMatchObject({ index: 0, total: 3, remainingMs: 10 * 60_000 });
+    // Past its guide time it stays on the step, counting how far over
+    expect(snapshot(withSteps([]), at('08:40')).step).toMatchObject({ index: 0, remainingMs: -25 * 60_000 });
+    expect(snapshot(withSteps([at('08:10')]), at('08:12')).step).toMatchObject({ index: 1, sinceMs: at('08:10'), remainingMs: null });
+    expect(snapshot(withSteps([at('08:10'), at('08:15')]), at('08:20')).step).toMatchObject({ index: 2, remainingMs: 15 * 60_000 });
+    expect(snapshot(withSteps([at('08:10'), at('08:15'), at('08:30')]), at('08:31')).step).toBeNull();
   });
 });
 

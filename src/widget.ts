@@ -5,10 +5,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Window, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
-import { checkIn, checkOut, dismissIntention, finishReturn, fireEvent, logBlock, setIntention, skipToday, snooze, startBlock } from './actions';
+import { checkIn, checkOut, dismissIntention, finishReturn, fireEvent, logBlock, setIntention, skipToday, snooze, startBlock, stepDone, stepUndo } from './actions';
 import { chime, notify, playTune, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
-import { type Planned, type Prompt, type Snapshot, anchorLabel, dayRecord, escalation, shifted, snapshot } from './engine';
+import { type Planned, type Prompt, type Snapshot, anchorLabel, dayRecord, escalation, shifted, snapshot, stepGuide } from './engine';
 import { type Garden, garden, growthNews } from './garden';
 import { hourLabel, hourTune, inQuietHours } from './hourly';
 import type { FocusMode } from './focus';
@@ -20,7 +20,7 @@ import './styles/widget.css';
 
 const WIDTH = 320;
 /** Tallest the widget gets: with the intention or review card open */
-const MAX_HEIGHT = 400;
+const MAX_HEIGHT = 560;
 /** The docked bar: wide enough for everything the card shows, on one line */
 const DOCK_WIDTH = 900;
 
@@ -29,6 +29,7 @@ const app = $('app');
 const arc = $('arc') as unknown as SVGCircleElement;
 const promptEl = $('prompt');
 const extrasEl = $('extras');
+const stepsEl = $('steps');
 
 const win = inTauri ? getCurrentWindow() : null;
 
@@ -97,10 +98,12 @@ function render(s: Snapshot) {
       stuck?.phase === 'go'
         ? `Just start → ${stuck.task} · ${formatDuration(stuck.until - s.now)}`
         : s.step
-          ? `${s.step.step.name} · ${formatDuration(s.step.remainingMs)} (${s.step.index + 1}/${s.current.steps.length})`
-          : intention
-            ? `→ ${intention}`
-            : '';
+          ? `Step ${s.step.index + 1}/${s.step.total} · ${s.step.step.name}${stepGuide(s.step) ? ` · ${stepGuide(s.step)}` : ''}`
+          : s.current.steps.length
+            ? `All ${s.current.steps.length} steps done ✓`
+            : intention
+              ? `→ ${intention}`
+              : '';
     setText(s.current.name, step, `${formatDuration(s.remainingMs)} left · until ${s.current.end}${planned(s.current)}`, nextLine);
   } else if (s.next) {
     const step = stuck?.phase === 'go' ? `Just start → ${stuck.task} · ${formatDuration(stuck.until - s.now)}` : '';
@@ -114,6 +117,7 @@ function render(s: Snapshot) {
   renderStrip(s);
   renderExtras(s);
   renderCard(s);
+  renderSteps(s);
 }
 
 function setText(title: string, step: string, until: string, next: string) {
@@ -150,6 +154,68 @@ function renderStrip(s: Snapshot) {
     }),
     h('div', { class: 'now', style: `left:${pct(nowMin)}` }),
   );
+}
+
+/**
+ * The block's steps as a numbered list: done ones ticked, the one you're on
+ * highlighted, the rest waiting. Only ticking one off moves you on. Floating,
+ * it sits under the card; docked, it opens above the bar from the list button.
+ */
+let stepsOpen = false;
+let stepsKey = '';
+function renderSteps(s: Snapshot) {
+  const block = s.current && !s.awaitingStart && s.current.steps.length ? s.current : null;
+  const toggle = $('toggle-steps');
+  toggle.hidden = !block || mode !== 'dock';
+  toggle.classList.toggle('on', stepsOpen);
+  toggle.title = toggle.ariaLabel = stepsOpen ? 'Hide steps' : 'Show steps';
+  // Docked, a prompt card takes the space above the bar first
+  const show = !!block && (mode === 'float' || (stepsOpen && promptEl.hidden));
+  const done = block ? (dayRecord(getState(), s.key).stepsDone[block.id] ?? []) : [];
+  const key = show ? `${s.key}:${block!.id}:${done.length}:${block!.steps.map((x) => x.id).join(',')}` : '';
+  stepsEl.hidden = !show;
+  if (key !== stepsKey) {
+    stepsKey = key;
+    if (!show) {
+      stepsEl.replaceChildren();
+    } else {
+      const id = block!.id;
+      stepsEl.replaceChildren(
+        h(
+          'ol',
+          { class: 'step-list' },
+          block!.steps.map((step, i) => {
+            const state = i < done.length ? 'done' : i === done.length ? 'now' : 'later';
+            // Tick the one you're on; untick only the last one ticked
+            const action = state === 'now' ? () => stepDone(s.key, id) : i === done.length - 1 ? () => stepUndo(s.key, id) : null;
+            return h(
+              'li',
+              { class: state },
+              h(
+                'button',
+                {
+                  class: 'tick',
+                  disabled: !action,
+                  title: state === 'now' ? 'Done, next step' : action ? 'Not done yet' : '',
+                  'aria-label': state === 'done' ? `${step.name}, done` : step.name,
+                  onClick: () => action?.(),
+                },
+                state === 'done' ? '✓' : String(i + 1),
+              ),
+              h('span', { class: 'name' }, step.name),
+              h('span', { class: 'guide' }, step.minutes > 0 ? `${step.minutes}m` : ''),
+            );
+          }),
+        ),
+      );
+    }
+  }
+  // The step you're on counts its guide time down, then up once it's over
+  const now = stepsEl.querySelector('li.now .guide');
+  if (now && s.step) {
+    now.textContent = stepGuide(s.step) || formatDuration(s.now - s.step.sinceMs);
+    now.classList.toggle('over', (s.step.remainingMs ?? 1) <= 0);
+  }
 }
 
 /**
@@ -610,10 +676,17 @@ function alerts(s: Snapshot) {
   }
   lastCurrent = currentKey;
 
+  // A step's guide time running out is a nudge, never a move: you tick it off yourself
   const stepKey = s.step ? `${currentKey}:${s.step.index}` : '';
-  if (booted && stepKey && stepKey !== lastStep && s.step!.index > 0 && settings.chime) {
-    chime('step');
-    lastSoundAt = Date.now();
+  if (booted && s.step && s.step.remainingMs !== null && s.step.remainingMs <= 0 && !fired.has(`${stepKey}:over`)) {
+    fired.add(`${stepKey}:over`);
+    if (stepKey === lastStep) {
+      notify(`${s.step.step.name}: guide time's up`, 'Tick it off when it’s done, and the next step starts.');
+      if (settings.chime) {
+        chime('step');
+        lastSoundAt = Date.now();
+      }
+    }
   }
   lastStep = stepKey;
 
@@ -702,6 +775,10 @@ async function main() {
     tick();
   });
   $('im-stuck').addEventListener('click', () => void openStuck());
+  $('toggle-steps').addEventListener('click', () => {
+    stepsOpen = !stepsOpen;
+    tick();
+  });
   $('check-out').addEventListener('click', () => void toggleCheck());
   if (inTauri) {
     void listen('toggle-dock', () => void setMode(mode === 'dock' ? 'float' : 'dock'));

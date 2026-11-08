@@ -8,6 +8,7 @@ import {
   dayKey,
   emptyDay,
   formatClock,
+  formatDuration,
   toMinutes,
 } from './model';
 
@@ -30,10 +31,15 @@ export interface Planned extends Block {
   movedToday: boolean;
 }
 
+/** The step you're on: the first one not yet ticked off. */
 export interface StepInfo {
   step: Step;
   index: number;
-  remainingMs: number;
+  total: number;
+  /** When this step began: the block's start, or when the one before was ticked */
+  sinceMs: number;
+  /** Left on the step's guide time, negative once over; null when it has none */
+  remainingMs: number | null;
 }
 
 /**
@@ -147,14 +153,22 @@ export function anchorLabel(state: AppState, block: Block): string {
 /** A chained block that ran or is running off its planned slot. */
 export const shifted = (p: Planned) => !p.waiting && Math.abs(p.startMs - p.planStartMs) >= 60_000;
 
-/** Steps run back to back from when the block started; null once they're all used up. */
-export function currentStep(block: Block, elapsedMs: number): StepInfo | null {
-  let elapsedSteps = 0;
-  for (const [index, step] of block.steps.entries()) {
-    elapsedSteps += step.minutes * 60_000;
-    if (elapsedMs < elapsedSteps) return { step, index, remainingMs: elapsedSteps - elapsedMs };
-  }
-  return null;
+/**
+ * Steps go in order and only move on when you tick one off; the clock never
+ * skips you ahead. Null once they're all done (or the block has none).
+ */
+export function currentStep(block: Block, done: number[], startMs: number, now: number): StepInfo | null {
+  const index = done.length;
+  const step = block.steps[index];
+  if (!step) return null;
+  const sinceMs = Math.max(done[index - 1] ?? startMs, startMs);
+  return { step, index, total: block.steps.length, sinceMs, remainingMs: step.minutes > 0 ? sinceMs + step.minutes * 60_000 - now : null };
+}
+
+/** "4m left" or "2m over" on a step's guide time; empty when it has none. */
+export function stepGuide(info: StepInfo): string {
+  if (info.remainingMs === null) return '';
+  return info.remainingMs > 0 ? `${formatDuration(info.remainingMs)} left` : `${formatDuration(-info.remainingMs)} over`;
 }
 
 export function snapshot(state: AppState, now: number): Snapshot {
@@ -182,7 +196,7 @@ export function snapshot(state: AppState, now: number): Snapshot {
     const anchor = Math.min(Math.max(started ?? current.startMs, current.startMs), now);
     totalMs = current.endMs - anchor;
     remainingMs = current.endMs - now;
-    if (!awaitingStart) step = currentStep(current, now - anchor);
+    if (!awaitingStart) step = currentStep(current, rec.stepsDone[current.id] ?? [], anchor, now);
   } else if (next) {
     const previousEnd = plan
       .filter((p) => !p.waiting && p.endMs <= now)

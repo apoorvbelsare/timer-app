@@ -26,6 +26,9 @@
             <div id="next" class="next"></div>
           </div>
           <div class="corner">
+            <button id="toggle-steps" class="icon-btn" title="Show steps" aria-label="Show steps" hidden>
+              <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4l1 1 2-2M2.5 9l1 1 2-2M8 4.5h6M8 9.5h6M8 13.5h6" /></svg>
+            </button>
             <button id="finish-block" class="icon-btn" title="Finish this block now" aria-label="Finish this block now" hidden>
               <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3 8.5l3 3 7-7" /></svg>
             </button>
@@ -49,6 +52,7 @@
         <div id="strip" class="strip"></div>
         <div id="extras" class="extras" hidden></div>
       </div>
+      <div id="steps" class="steps" hidden></div>
       <div id="prompt" class="prompt" hidden></div>
     </div>
     <script type="module" src="/src/widget.ts"></script>

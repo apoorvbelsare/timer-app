@@ -1,8 +1,10 @@
 export type BlockStatus = 'done' | 'partly' | 'skipped';
 
+/** One step of a block, done in order and ticked off by hand. */
 export interface Step {
   id: string;
   name: string;
+  /** A rough guide for how long it takes; 0 for none. Never moves you on by itself. */
   minutes: number;
 }
 
@@ -79,6 +81,8 @@ export interface DayRecord {
   finishedAt: Record<string, number>;
   /** Each time an event was marked today */
   events: Record<string, number[]>;
+  /** When each of a block's steps was ticked off, in order: its length is how many are done */
+  stepsDone: Record<string, number[]>;
 }
 
 export type Ambient = 'off' | 'rain' | 'forest' | 'brown';
@@ -177,6 +181,7 @@ export function emptyDay(): DayRecord {
     notes: {},
     finishedAt: {},
     events: {},
+    stepsDone: {},
   };
 }
 

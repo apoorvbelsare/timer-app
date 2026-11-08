@@ -25,6 +25,16 @@ export function logBlock(key: string, id: string, status: BlockStatus | null, no
   });
 }
 
+/** Tick off the step you're on; the next one starts now. */
+export function stepDone(key: string, id: string) {
+  return update((d) => void (ensureDay(d, key).stepsDone[id] ??= []).push(Date.now()));
+}
+
+/** Untick the last step you ticked off. */
+export function stepUndo(key: string, id: string) {
+  return update((d) => void ensureDay(d, key).stepsDone[id]?.pop());
+}
+
 export function setNote(key: string, id: string, note: string) {
   return update((d) => {
     const day = ensureDay(d, key);
