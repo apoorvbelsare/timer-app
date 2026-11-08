@@ -205,6 +205,7 @@ body {
 /* ── Recharge chips ── */
 .extras {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
   margin-top: 10px;
@@ -229,6 +230,29 @@ body {
   letter-spacing: 0;
   text-transform: none;
   cursor: pointer;
+}
+.news {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  text-align: left;
+  cursor: pointer;
+  animation: grow-in 0.5s ease-out;
+}
+@keyframes grow-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
 }
 .chip:hover {
   background: rgba(246, 241, 231, 0.09);

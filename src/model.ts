@@ -69,11 +69,20 @@ export interface Settings {
   ambientVolume: number;
 }
 
+/** A stray thought caught mid-focus, to deal with later. */
+export interface Parked {
+  id: string;
+  text: string;
+  at: number;
+  done: boolean;
+}
+
 export interface AppState {
   version: 1;
   routine: Block[];
   settings: Settings;
   days: Record<string, DayRecord>;
+  parked: Parked[];
 }
 
 /** Earthy tones: sage, clay, ochre, dusk, heather, lake, rose, moss */
@@ -97,7 +106,7 @@ export function defaultSettings(): Settings {
 }
 
 export function defaultState(): AppState {
-  return { version: 1, routine: [], settings: defaultSettings(), days: {} };
+  return { version: 1, routine: [], settings: defaultSettings(), days: {}, parked: [] };
 }
 
 export function emptyDay(): DayRecord {
@@ -117,12 +126,15 @@ export function normalizeState(raw: Partial<AppState>): AppState {
   for (const [key, rec] of Object.entries(raw.days ?? {})) {
     const empty = emptyDay();
     days[key] = { ...empty, ...rec, override: { ...empty.override, ...rec?.override } };
+    // Another variant of the app may have saved intentions without their to-do list
+    for (const intention of Object.values(days[key].intentions)) intention.todos ??= [];
   }
   return {
     version: 1,
     routine: raw.routine ?? [],
     settings: { ...defaultSettings(), ...raw.settings },
     days,
+    parked: raw.parked ?? [],
   };
 }
 

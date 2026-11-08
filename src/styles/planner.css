@@ -619,3 +619,158 @@ input.narrow {
 .todo-list .check {
   align-items: center;
 }
+
+/* ── Garden ── */
+.garden-page {
+  overflow-y: auto;
+}
+.garden-card {
+  flex: none;
+  overflow: hidden;
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, #f3ead6 0%, #e7efe2 70%);
+  border: 1px solid var(--border);
+}
+.garden-card svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.garden-scene .ground {
+  fill: color-mix(in srgb, var(--sage) 70%, #fff);
+}
+.garden-scene .ground-back {
+  fill: color-mix(in srgb, var(--sage) 40%, #fff);
+}
+.garden-scene.sleepy {
+  filter: saturate(0.55) brightness(0.95);
+}
+@media (prefers-color-scheme: dark) {
+  .garden-card {
+    background: linear-gradient(180deg, #24382f 0%, #1c2f29 70%);
+  }
+  .garden-scene .ground {
+    fill: #2c4a3f;
+  }
+  .garden-scene .ground-back {
+    fill: #253f35;
+  }
+}
+.sleepy-note {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--surface-2);
+  color: var(--muted);
+}
+.garden-stats {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.stat {
+  flex: 1;
+  min-width: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.stat strong {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 500;
+}
+.stat span {
+  color: var(--muted);
+  font-size: 13px;
+}
+.garden-how {
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+}
+.garden-how ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  line-height: 1.7;
+  color: var(--muted);
+}
+
+/* ── Parking lot ── */
+.parking-page {
+  overflow-y: auto;
+  max-width: 820px;
+}
+.nav .count {
+  margin-left: 6px;
+  padding: 0 7px;
+  border-radius: 99px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 6px;
+  background: var(--surface);
+  font: inherit;
+  font-size: 12px;
+}
+.park-add {
+  display: flex;
+  gap: 8px;
+}
+.park-add input {
+  flex: 1;
+}
+.parked-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.parked {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.parked-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.parked.done .parked-text > span:first-child {
+  color: var(--muted);
+  text-decoration: line-through;
+}
+.to-block {
+  padding: 5px 8px;
+  font-size: 12.5px;
+}
+.empty-lot {
+  padding: 28px;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  text-align: center;
+}
+.parked-done {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-start;
+}

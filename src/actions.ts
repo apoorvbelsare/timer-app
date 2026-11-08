@@ -91,3 +91,33 @@ export function snooze(key: string, id: string) {
     ensureDay(d, key).snoozedUntil[id] = Date.now() + SNOOZE_MS;
   });
 }
+
+// ── Parking lot ──────────────────────────────────────────────────────────────
+
+export function parkThought(text: string) {
+  if (!text.trim()) return Promise.resolve();
+  return update((d) => void d.parked.push({ id: newId(), text: text.trim(), at: Date.now(), done: false }));
+}
+
+export function setParkedDone(id: string, done: boolean) {
+  return update((d) => {
+    const item = d.parked.find((p) => p.id === id);
+    if (item) item.done = done;
+  });
+}
+
+export function removeParked(id: string) {
+  return update((d) => void (d.parked = d.parked.filter((p) => p.id !== id)));
+}
+
+/** Turn a parked thought into a to-do in one of today's blocks, and clear it from the lot. */
+export function parkedToTodo(id: string, key: string, blockId: string) {
+  return update((d) => {
+    const item = d.parked.find((p) => p.id === id);
+    if (!item) return;
+    const day = ensureDay(d, key);
+    const intention = (day.intentions[blockId] ??= { text: '', todos: [], dismissed: false });
+    intention.todos.push({ id: newId(), text: item.text, done: false });
+    item.done = true;
+  });
+}

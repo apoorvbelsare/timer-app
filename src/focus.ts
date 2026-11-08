@@ -7,6 +7,8 @@ import { chime, unlockAudioOnClick } from './alerts';
 import { startFlock } from './birds';
 import { h } from './dom';
 import { type Snapshot, dayRecord, snapshot } from './engine';
+import { garden } from './garden';
+import { renderGarden } from './garden-view';
 import { type Ambient, formatClock, formatDuration } from './model';
 import { CIRCUMFERENCE, RING_R, ringColor, ringRemaining, ringText } from './ring';
 import { AMBIENT_LABELS, playAmbient, setAmbientVolume, stopAmbient } from './sounds';
@@ -278,6 +280,15 @@ function renderDock() {
   volume.value = String(ambientVolume);
 }
 
+/** The garden grows on the hill at the bottom: what showing up has built so far. */
+let gardenTotal = -1;
+function renderGardenLayer() {
+  const g = garden(getState());
+  if (g.total === gardenTotal) return;
+  gardenTotal = g.total;
+  document.getElementById('garden')!.replaceChildren(renderGarden(g));
+}
+
 async function hideWindow() {
   setMode('focus');
   stopAmbient();
@@ -325,9 +336,11 @@ async function main() {
 
   subscribe(() => {
     renderDock();
+    renderGardenLayer();
     if (mode === 'focus') tick();
   });
   renderDock();
+  renderGardenLayer();
   const fromHash = location.hash.slice(1) as FocusMode;
   setMode(['breathe', 'stretch'].includes(fromHash) ? fromHash : 'focus');
   setInterval(tick, 1000);

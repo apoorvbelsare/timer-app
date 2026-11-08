@@ -6,6 +6,7 @@ use tauri::{
     AppHandle, Emitter, Manager, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 
 fn state_path(app: &AppHandle) -> Result<PathBuf, String> {
     let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
@@ -49,6 +50,16 @@ fn show_focus(app: &AppHandle) {
     let _ = app.emit_to("focus", "focus-mode", "focus");
 }
 
+/// The parking lot's quick-capture box: centred, on top, ready to type.
+fn show_capture(app: &AppHandle) {
+    if let Some(window) = app.get_webview_window("capture") {
+        let _ = window.center();
+        let _ = window.show();
+        let _ = window.set_focus();
+        let _ = app.emit_to("capture", "capture-open", ());
+    }
+}
+
 fn toggle_widget(app: &AppHandle) {
     if let Some(window) = app.get_webview_window("widget") {
         if window.is_visible().unwrap_or(false) {
@@ -67,11 +78,23 @@ pub fn run() {
             show_planner(app)
         }))
         .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == ShortcutState::Pressed
+                        && shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::Space)
+                    {
+                        show_capture(app);
+                    }
+                })
+                .build(),
+        )
         .plugin(tauri_plugin_autostart::init(MacosLauncher::LaunchAgent, None))
         .invoke_handler(tauri::generate_handler![load_state, save_state])
         .setup(|app| {
             let planner = MenuItem::with_id(app, "planner", "Open planner", true, None::<&str>)?;
             let focus = MenuItem::with_id(app, "focus", "Focus mode", true, None::<&str>)?;
+            let park = MenuItem::with_id(app, "park", "Park a thought…	Ctrl+Shift+Space", true, None::<&str>)?;
             let widget = MenuItem::with_id(app, "widget", "Show / hide widget", true, None::<&str>)?;
             let lock = CheckMenuItem::with_id(
                 app,
@@ -83,7 +106,7 @@ pub fn run() {
             )?;
             let separator = PredefinedMenuItem::separator(app)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            let menu = Menu::with_items(app, &[&planner, &focus, &widget, &lock, &separator, &quit])?;
+            let menu = Menu::with_items(app, &[&planner, &focus, &park, &widget, &lock, &separator, &quit])?;
 
             let lock_item = lock.clone();
             TrayIconBuilder::with_id("main")
@@ -94,6 +117,7 @@ pub fn run() {
                 .on_menu_event(move |app, event| match event.id().as_ref() {
                     "planner" => show_planner(app),
                     "focus" => show_focus(app),
+                    "park" => show_capture(app),
                     "widget" => toggle_widget(app),
                     "lock" => {
                         let locked = lock_item.is_checked().unwrap_or(false);
@@ -115,6 +139,12 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // Another app may already own the shortcut; the tray item still works then
+            let capture = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space);
+            if let Err(err) = app.global_shortcut().register(capture) {
+                eprintln!("Couldn't register Ctrl+Shift+Space: {err}");
+            }
             Ok(())
         })
         // The app lives in the tray: closing a window only hides it

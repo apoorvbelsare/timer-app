@@ -28,7 +28,7 @@
       {
         "label": "planner",
         "url": "planner.html",
-        "title": "Timer · Planner",
+        "title": "Timer \u00b7 Planner",
         "width": 1040,
         "height": 740,
         "minWidth": 760,
@@ -58,6 +58,21 @@
         "skipTaskbar": true,
         "maximized": true,
         "visible": false
+      },
+      {
+        "label": "capture",
+        "url": "capture.html",
+        "title": "Park a thought",
+        "width": 560,
+        "height": 104,
+        "decorations": false,
+        "transparent": true,
+        "shadow": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "resizable": false,
+        "center": true,
+        "visible": false
       }
     ],
     "security": {
@@ -66,7 +81,9 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

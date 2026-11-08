@@ -15,6 +15,8 @@ A visual routine timer for ADHD brains. It sits in the corner of your screen all
   - *Before:* when a block starts, the widget asks for your intention. Not now is always fine.
   - *During:* focus mode gives a big ring, your intention and to-dos, and a small flock of birds drifting overhead for company. You can add ambient rain, forest or brown noise, all generated in the app.
   - *After:* the "How did it go?" card takes a one-line note.
+- **Growing garden.** Every block you log as Done (2 points) or Partly (1) grows it; skipping is free and nothing ever shrinks. One oak grows from seed to tree. Each fully grown tree starts two seedlings, until 31 trees make a forest, and then wildflowers. It stands on the hill in focus mode and has its own page in the planner. After 3 days away it looks sleepy until you're back.
+- **Parking lot.** Press Ctrl+Shift+Space anywhere (or use the tray) to park a stray thought in a small box: type it, press Enter, and you're back to work. Review them later in the planner and turn any into a to-do for one of today's blocks. In free time, the widget reminds you how many are waiting.
 - **Recharge breaks.** A 2-minute guided breathing exercise and a 3-minute stretch sequence, offered in free time between blocks.
 - **Tray app.** Lives in the system tray and starts with Windows. The tray menu can hide the widget or lock it so clicks pass through.
 
@@ -43,6 +45,8 @@ npm run tauri build
 | `src/engine.ts` | Pure logic: today's plan, the current block, prompts, escalation, overlap checks |
 | `src/store.ts` | Loads and saves state through the Rust side and keeps windows in sync |
 | `src/widget.ts`, `planner.ts`, `overlay.ts`, `focus.ts` | The four windows |
+| `src/garden.ts`, `garden-view.ts` | How the garden grows (from block logs) and how it's drawn |
+| `src/capture.ts`, `planner-pages.ts` | The parking lot's capture box, and the Garden and Parking lot pages |
 | `src/sounds.ts`, `birds.ts` | Synthesised ambient sound and the flock animation |
 | `src/styles/theme.css` | Shared palette and fonts (Fraunces + Nunito, bundled) |
 | `src-tauri/` | The Tauri shell: tray menu, state file, plugins |

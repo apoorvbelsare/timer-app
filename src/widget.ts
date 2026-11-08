@@ -8,6 +8,7 @@ import { dismissIntention, logBlock, setIntention, skipToday, snooze, startBlock
 import { chime, notify, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
 import { type Snapshot, dayRecord, escalation, snapshot } from './engine';
+import { type Garden, garden, growthNews } from './garden';
 import type { FocusMode } from './focus';
 import { formatDuration, minuteOfDay } from './model';
 import { CIRCUMFERENCE, ringColor, ringRemaining, ringText } from './ring';
@@ -26,15 +27,16 @@ const extrasEl = $('extras');
 
 const win = inTauri ? getCurrentWindow() : null;
 
-async function openPlanner() {
+async function openPlanner(view?: 'garden' | 'parking') {
   if (!inTauri) {
-    window.open('/planner.html', 'planner');
+    window.open(`/planner.html${view ? `#${view}` : ''}`, 'planner');
     return;
   }
   const planner = await Window.getByLabel('planner');
   await planner?.show();
   await planner?.unminimize();
   await planner?.setFocus();
+  if (view) await emit('planner-view', view);
 }
 
 async function openFocus(mode: FocusMode = 'focus') {
@@ -124,22 +126,47 @@ function renderStrip(s: Snapshot) {
   );
 }
 
-/** Free time with room to spare is a good moment for a recharge break. */
-let extrasShown = false;
+/** A short celebration when the garden grows, shown for a few seconds under the strip. */
+let gardenNews: { text: string; until: number } | null = null;
+let lastGarden: Garden | null = null;
+
+function watchGarden() {
+  const now = garden(getState());
+  const news = lastGarden && growthNews(lastGarden, now);
+  if (news) {
+    gardenNews = { text: news, until: Date.now() + 8000 };
+    if (now.grownCount > lastGarden!.grownCount) notify('Your garden grew', news);
+  }
+  lastGarden = now;
+}
+
+/**
+ * One line under the strip, most important first: garden news, then in free
+ * time a recharge break and any parked thoughts waiting for attention.
+ */
+let extrasKey = '';
 function renderExtras(s: Snapshot) {
-  const show = !s.current && !!s.next && s.remainingMs > 3 * 60_000 && !s.prompt;
-  if (show === extrasShown) return;
-  extrasShown = show;
-  extrasEl.hidden = !show;
-  extrasEl.replaceChildren(
-    ...(show
+  if (gardenNews && Date.now() > gardenNews.until) gardenNews = null;
+  const parked = getState().parked.filter((p) => !p.done).length;
+  const free = !s.current && !!s.next && s.remainingMs > 3 * 60_000;
+  const kind = s.prompt ? '' : gardenNews ? `news:${gardenNews.text}` : free ? `free:${parked}` : !s.current && parked ? `parked:${parked}` : '';
+  if (kind === extrasKey) return;
+  extrasKey = kind;
+  extrasEl.hidden = !kind;
+  const parkedChip = parked > 0 && h('button', { class: 'chip', title: 'Thoughts you parked', onClick: () => openPlanner('parking') }, `Parked · ${parked}`);
+  const content = kind.startsWith('news')
+    ? [h('button', { class: 'news', onClick: () => openPlanner('garden') }, h('span', { class: 'sprout', 'aria-hidden': 'true' }, '🌱'), gardenNews!.text)]
+    : kind.startsWith('free')
       ? [
           h('span', {}, 'Recharge'),
-          h('button', { class: 'chip', onClick: () => openFocus('breathe') }, 'Breathe · 2 min'),
-          h('button', { class: 'chip', onClick: () => openFocus('stretch') }, 'Stretch · 3 min'),
+          h('button', { class: 'chip', onClick: () => openFocus('breathe') }, 'Breathe'),
+          h('button', { class: 'chip', onClick: () => openFocus('stretch') }, 'Stretch'),
+          parkedChip,
         ]
-      : []),
-  );
+      : kind
+        ? [h('span', {}, 'Later'), parkedChip]
+        : [];
+  extrasEl.replaceChildren(...content.filter((c): c is HTMLElement => !!c));
 }
 
 let promptKey = '';
@@ -325,7 +352,9 @@ async function main() {
   $('open-planner').addEventListener('click', () => void openPlanner());
   $('open-focus').addEventListener('click', () => void openFocus());
 
+  watchGarden();
   subscribe((state) => {
+    watchGarden();
     if (state.settings.widgetPos === null) void placeWidget();
     tick();
   });

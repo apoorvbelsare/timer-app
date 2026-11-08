@@ -1,7 +1,7 @@
 import '@fontsource-variable/fraunces';
 import '@fontsource-variable/nunito';
 import { disable as disableAutostart, enable as enableAutostart, isEnabled as autostartEnabled } from '@tauri-apps/plugin-autostart';
-import { emit } from '@tauri-apps/api/event';
+import { emit, listen } from '@tauri-apps/api/event';
 import { Window } from '@tauri-apps/api/window';
 import { addTodo, ensureDay, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, toggleTodo } from './actions';
 import { chime, unlockAudioOnClick } from './alerts';
@@ -21,10 +21,11 @@ import {
   sampleRoutine,
   toMinutes,
 } from './model';
+import { renderGardenPage, renderParkingPage } from './planner-pages';
 import { getState, inTauri, initStore, subscribe, update } from './store';
 import './styles/planner.css';
 
-type View = 'today' | 'routine' | 'settings';
+type View = 'today' | 'routine' | 'garden' | 'parking' | 'settings';
 
 const viewEl = document.getElementById('view')!;
 let view: View = 'today';
@@ -42,7 +43,19 @@ function go(next: View) {
 function render() {
   document.querySelectorAll<HTMLButtonElement>('.nav button[data-view]').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   const scroll = viewEl.querySelector('.timeline-scroll')?.scrollTop;
-  viewEl.replaceChildren(view === 'today' ? renderToday() : view === 'routine' ? renderRoutine() : renderSettings());
+  const pages: Record<View, () => HTMLElement> = {
+    today: renderToday,
+    routine: renderRoutine,
+    garden: renderGardenPage,
+    parking: () => renderParkingPage(render),
+    settings: renderSettings,
+  };
+  viewEl.replaceChildren(pages[view]());
+  const open = getState().parked.filter((p) => !p.done).length;
+  const badge = document.getElementById('parked-count')!;
+  badge.hidden = open === 0;
+  badge.textContent = String(open);
+  viewEl.querySelector<HTMLInputElement>('[data-autofocus]')?.focus();
   const timeline = viewEl.querySelector('.timeline-scroll');
   if (timeline && scroll !== undefined) timeline.scrollTop = scroll;
 }
@@ -647,6 +660,9 @@ async function main() {
     await emit('focus-mode', 'focus');
   });
   subscribe(() => render());
+  // The widget and tray open the planner on a specific page
+  if (inTauri) await listen<View>('planner-view', (e) => go(e.payload));
+  if (location.hash === '#parking' || location.hash === '#garden') view = location.hash.slice(1) as View;
   render();
 
   // Keep the "now" line and the ended-block buttons fresh, without wiping a half-typed form

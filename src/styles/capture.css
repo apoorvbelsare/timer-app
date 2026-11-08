@@ -1,0 +1,58 @@
+@import './theme.css';
+
+html,
+body {
+  margin: 0;
+  background: transparent;
+  overflow: hidden;
+  font-family: var(--font-body);
+}
+
+.capture {
+  margin: 6px;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 12px;
+  row-gap: 4px;
+  padding: 14px 18px 12px;
+  border-radius: 20px;
+  background: rgba(31, 59, 51, 0.97);
+  border: 1px solid rgba(246, 241, 231, 0.14);
+  color: var(--cream);
+  transition: background 0.25s ease;
+}
+.capture.saved {
+  background: rgba(47, 93, 80, 0.98);
+}
+.leaf {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: var(--sage);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+input {
+  width: 100%;
+  padding: 4px 0;
+  border: 0;
+  background: transparent;
+  color: var(--cream);
+  font: inherit;
+  font-size: 18px;
+  outline: none;
+}
+input::placeholder {
+  color: rgba(246, 241, 231, 0.5);
+}
+.hint {
+  grid-column: 2;
+  font-size: 12px;
+  color: rgba(246, 241, 231, 0.55);
+}
+.saved .hint {
+  color: var(--sage);
+  font-weight: 700;
+}

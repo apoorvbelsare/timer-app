@@ -2,7 +2,13 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "What the widget, planner and overlay pages may do",
-  "windows": ["widget", "planner", "overlay", "focus"],
+  "windows": [
+    "widget",
+    "planner",
+    "overlay",
+    "focus",
+    "capture"
+  ],
   "permissions": [
     "core:default",
     "core:window:allow-show",

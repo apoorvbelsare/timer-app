@@ -10,7 +10,7 @@ export default defineConfig({
   build: {
     target: 'es2021',
     rollupOptions: {
-      input: { widget: page('widget'), planner: page('planner'), overlay: page('overlay'), focus: page('focus') },
+      input: { widget: page('widget'), planner: page('planner'), overlay: page('overlay'), focus: page('focus'), capture: page('capture') },
     },
   },
 });
