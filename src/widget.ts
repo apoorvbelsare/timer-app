@@ -180,7 +180,14 @@ function renderSteps(s: Snapshot) {
       stepsEl.replaceChildren();
     } else {
       const id = block!.id;
+      const total = block!.steps.length;
       stepsEl.replaceChildren(
+        h(
+          'div',
+          { class: 'steps-head' },
+          h('span', {}, mode === 'dock' ? `${block!.name} · steps` : 'Steps'),
+          h('span', { class: 'count' }, `${Math.min(done.length, total)} of ${total} done`),
+        ),
         h(
           'ol',
           { class: 'step-list' },
@@ -508,7 +515,28 @@ async function taskbar(): Promise<Taskbar | null> {
  * The window follows the card's height, so the widget never clips or leaves a gap.
  * Docked, the bar fills the taskbar's height and any prompt card grows upward from it.
  */
-async function fitWindow() {
+let fitting: Promise<void> | null = null;
+let refit = false;
+/** One fit at a time: an older, smaller fit landing last would clip the card that just grew. */
+function fitWindow(): Promise<void> {
+  if (fitting) {
+    refit = true;
+    return fitting;
+  }
+  fitting = (async () => {
+    try {
+      do {
+        refit = false;
+        await fitOnce();
+      } while (refit);
+    } finally {
+      fitting = null;
+    }
+  })();
+  return fitting;
+}
+
+async function fitOnce() {
   if (!win) return;
   if (mode === 'float') {
     const height = Math.min(MAX_HEIGHT, Math.ceil(app.getBoundingClientRect().height) + 8);

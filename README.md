@@ -6,7 +6,7 @@ Timer sits in the empty middle of your taskbar, or in a corner of your screen, a
 
 Everything stays on your PC. There's no account, no cloud and no tracking.
 
-> **`main` has the latest version of Timer (v0.6.2, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
+> **`main` has the latest version of Timer (v0.6.3, 8 November 2026)**, and it's the one to install and build from. The other branches are earlier versions and experiments, kept for reference. See [Branches](#branches).
 
 ---
 
@@ -101,7 +101,7 @@ If a `Timer_x.y.z_x64-setup.exe` is attached to the [Releases](https://github.co
    ```
 
 3. Run the installer it creates:
-   `src-tauri\target\release\bundle\nsis\Timer_0.6.2_x64-setup.exe`
+   `src-tauri\target\release\bundle\nsis\Timer_0.6.3_x64-setup.exe`
 
 After installing, **Timer** is in your Start menu, and it **starts with Windows** from the first launch. You can turn that off in Settings. To uninstall: **Windows Settings → Apps → Timer**.
 
@@ -221,7 +221,7 @@ npm run tauri build   # build the Windows installer
 
 | Branch | What it is |
 | --- | --- |
-| `main` | **Use this one: the latest version (v0.6.2, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
+| `main` | **Use this one: the latest version (v0.6.3, 8 November 2026).** Flown style, the garden, parking lot, hourly ping and taskbar dock |
 | `feat/taskbar-dock` | Where the taskbar dock was built; the same as `main` |
 | `feat/garden-parking-lot` | v0.3.0: Flown style plus the garden, parking lot and hourly ping |
 | `feat/flown-style` | The Flown-inspired version without those three additions |
