@@ -257,8 +257,10 @@ let extrasKey = '';
 function renderExtras(s: Snapshot) {
   if (flash && Date.now() > flash.until) flash = null;
   const parked = getState().parked.filter((p) => !p.done).length;
-  const free = !s.current && !!s.next && s.remainingMs > 3 * 60_000;
-  const kind = s.prompt ? '' : flash ? `news:${flash.text}` : free ? `free:${parked}` : !s.current && parked ? `parked:${parked}` : '';
+  // Nothing running: the next block can start right now, whatever the clock says
+  const upcoming = !s.current && !getState().away ? s.next : null;
+  const roomy = !!upcoming && (upcoming.waiting || s.remainingMs > 3 * 60_000);
+  const kind = s.prompt ? '' : flash ? `news:${flash.text}` : upcoming ? `free:${upcoming.id}:${roomy}:${parked}` : !s.current && parked ? `parked:${parked}` : '';
   if (kind === extrasKey) return;
   extrasKey = kind;
   extrasEl.hidden = !kind;
@@ -267,9 +269,13 @@ function renderExtras(s: Snapshot) {
     ? [h('button', { class: 'news', onClick: () => flash?.open && openPlanner(flash.open) }, h('span', { 'aria-hidden': 'true' }, flash!.icon), flash!.text)]
     : kind.startsWith('free')
       ? [
-          h('span', {}, 'Recharge'),
-          h('button', { class: 'chip', onClick: () => openFocus('breathe') }, 'Breathe'),
-          h('button', { class: 'chip', onClick: () => openFocus('stretch') }, 'Stretch'),
+          h(
+            'button',
+            { class: 'chip accent', title: `Start ${upcoming!.name} now. It runs its full length from now.`, onClick: () => startBlock(s.key, upcoming!.id) },
+            `▶ Start ${upcoming!.name}`,
+          ),
+          roomy && h('button', { class: 'chip', onClick: () => openFocus('breathe') }, 'Breathe'),
+          roomy && h('button', { class: 'chip', onClick: () => openFocus('stretch') }, 'Stretch'),
           parkedChip,
         ]
       : kind

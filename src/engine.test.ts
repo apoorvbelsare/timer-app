@@ -125,6 +125,20 @@ describe('prompts', () => {
     expect(snapshot(s, at('21:05')).prompt?.kind).toBe('review');
   });
 
+  it('starts any block early when you start it ahead of its time', () => {
+    const s = stateWith([block('wake', '07:00', '07:45'), block('work', '09:00', '12:00')]);
+    s.days[KEY] = { ...emptyDay(), startedAt: { wake: at('05:50') } };
+
+    const early = snapshot(s, at('06:00'));
+    expect(early.current?.id).toBe('wake');
+    expect(early.remainingMs).toBe(35 * 60_000);
+    expect(early.next?.id).toBe('work');
+    // Its full length from the start, and it doesn't come round again at 07:00
+    expect(snapshot(s, at('06:40')).current).toBeNull();
+    expect(snapshot(s, at('07:10')).current).toBeNull();
+    expect(planFor(s, WED).find((p) => p.id === 'wake')).toMatchObject({ start: '05:50', end: '06:35', planStart: '07:00' });
+  });
+
   it('leaves blocks that ended hours ago to the planner', () => {
     const s = stateWith([block('a', '08:00', '09:00')]);
     expect(snapshot(s, at('12:30')).prompt).toBeNull();

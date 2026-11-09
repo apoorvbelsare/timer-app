@@ -5,7 +5,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Window } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { addTodo, ensureDay, fireEvent, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, stepDone, stepUndo, toggleTodo } from './actions';
+import { addTodo, ensureDay, fireEvent, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, stepDone, stepUndo, toggleTodo, unstartBlock } from './actions';
 import { chime, playTune, unlockAudioOnClick } from './alerts';
 import { hourLabel, hourTune } from './hourly';
 import { h } from './dom';
@@ -307,6 +307,7 @@ function stepsGroup(p: Planned, key: string) {
 
 function renderTodayDetail(p: Planned, key: string, now: number) {
   const status = dayRecord(getState(), key).log[p.id];
+  const startedAt = dayRecord(getState(), key).startedAt[p.id];
   const ended = !p.waiting && p.endMs <= now;
   const running = !p.waiting && p.startMs <= now && now < p.endMs;
   let start = p.planStart;
@@ -335,12 +336,30 @@ function renderTodayDetail(p: Planned, key: string, now: number) {
     p.skippedToday
       ? h('div', { class: 'group' }, h('p', {}, 'Skipped for today.'), h('button', { class: 'btn', onClick: () => restoreToday(key, p.id) }, 'Bring it back'))
       : [
-          (running && p.optional && !dayRecord(getState(), key).startedAt[p.id]) || p.waiting
+          // Any block that hasn't begun can start now: up early, or simply ready sooner
+          (running && p.optional && startedAt === undefined) || p.waiting || (!running && !ended && startedAt === undefined)
             ? h(
                 'div',
                 { class: 'group' },
                 h('button', { class: 'btn primary', onClick: () => startBlock(key, p.id) }, 'Start now'),
-                p.waiting && h('p', { class: 'sub small' }, `Starts by itself ${anchorLabel(getState(), p)}${p.latestStart ? `, or at ${p.latestStart} at the latest` : ''}.`),
+                h(
+                  'p',
+                  { class: 'sub small' },
+                  p.waiting
+                    ? `Starts by itself ${anchorLabel(getState(), p)}${p.latestStart ? `, or at ${p.latestStart} at the latest` : ''}.`
+                    : running
+                      ? `Runs until ${p.end}.`
+                      : `It runs its full ${formatDuration(p.planEndMs - p.planStartMs)} from when you start it.`,
+                ),
+              )
+            : null,
+          // Started early by mistake? Put it back on the clock
+          startedAt !== undefined && startedAt < p.planStartMs && !ended && !status
+            ? h(
+                'div',
+                { class: 'group' },
+                h('p', { class: 'sub small' }, `Started early at ${p.start} (planned ${p.planStart}).`),
+                h('button', { class: 'btn ghost small', onClick: () => unstartBlock(key, p.id) }, `Undo · back to ${p.planStart}`),
               )
             : null,
           ended || running

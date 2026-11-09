@@ -45,6 +45,7 @@ Many people with ADHD struggle to sense time passing (often called *time blindne
 
 ### Anchors, not just clocks
 Time blindness makes "at 09:00" hard to act on; "after breakfast" is much easier. So blocks can hang off things that happen.
+- **Start any block whenever you're ready:** up early, or done with something sooner? Press **▶ Start …** on the widget during free time, or **Start now** on any upcoming block in the planner's Today page. It runs its full length from that moment and won't come round again at its usual time. Its planned slot stays as a dashed outline, and **Undo** puts it back on the clock.
 - **Chained blocks:** a block can start **after another block is done**, or **after one of your events**, instead of at a clock time (Routine → Starts). It keeps its planned slot on the Today page and runs for that long from whenever it actually starts. If it moves, the Today page shows where it ran in solid colour, with the planned slot as a dashed outline behind it, and the widget says "planned 09:00". You can give it a **latest start** so it begins anyway if the anchor never comes.
 - **Finish early:** the ✓ on the widget ends the current block now and starts whatever is chained after it.
 - **Your events:** moments you mark as they happen, like "Ate lunch", "Back from gym" or "Kids in bed" (Settings → Your events). Mark them from the tray's **Mark an event** menu, your own hotkey, or the buttons on the Today page. Each one shows on the Today timeline at the time you marked it.

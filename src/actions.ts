@@ -88,6 +88,11 @@ export function startBlock(key: string, id: string) {
   });
 }
 
+/** Changed your mind about starting early: back to its planned time. */
+export function unstartBlock(key: string, id: string) {
+  return update((d) => void delete ensureDay(d, key).startedAt[id]);
+}
+
 export function skipToday(key: string, id: string) {
   return update((d) => {
     const day = ensureDay(d, key);

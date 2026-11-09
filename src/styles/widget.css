@@ -269,6 +269,19 @@ body {
 .chip:hover {
   background: rgba(246, 241, 231, 0.09);
 }
+/* "▶ Start …": the one chip that acts, so it stands out */
+.chip.accent {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-color: transparent;
+  background: var(--cream);
+  color: var(--forest-deep);
+}
+.chip.accent:hover {
+  background: #fff;
+}
 
 /* ── Prompt card ── */
 .prompt {

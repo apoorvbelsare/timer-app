@@ -121,6 +121,14 @@ export function planFor(state: AppState, date: Date, includeSkipped = false): Pl
           startMs = trigger;
           endMs = trigger + (planEndMs - planStartMs);
         }
+      } else {
+        // Started ahead of its slot (up early, ready sooner): it runs its full length from then.
+        // A late start keeps its planned end, as optional blocks always have.
+        const started = rec.startedAt[block.id];
+        if (started !== undefined && started < planStartMs) {
+          startMs = started;
+          endMs = started + (planEndMs - planStartMs);
+        }
       }
       // Marked done while still running: it ends there
       const finished = rec.finishedAt[block.id];
