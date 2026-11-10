@@ -62,8 +62,8 @@ describe('snapshot', () => {
     expect(snap.progress).toBeCloseTo(0.5);
   });
 
-  it('goes through steps in order, only moving on when one is ticked off', () => {
-    const withSteps = (done: number[]) =>
+  it('is on the first step not ticked off, and only moves on when one is', () => {
+    const withSteps = (done: (number | null)[]) =>
       stateWith(
         [
           block('a', '08:00', '09:00', {
@@ -82,6 +82,26 @@ describe('snapshot', () => {
     expect(snapshot(withSteps([at('08:10')]), at('08:12')).step).toMatchObject({ index: 1, sinceMs: at('08:10'), remainingMs: null });
     expect(snapshot(withSteps([at('08:10'), at('08:15')]), at('08:20')).step).toMatchObject({ index: 2, remainingMs: 15 * 60_000 });
     expect(snapshot(withSteps([at('08:10'), at('08:15'), at('08:30')]), at('08:31')).step).toBeNull();
+  });
+
+  it('lets steps be ticked in any order', () => {
+    const s = stateWith([
+      block('a', '08:00', '09:00', {
+        steps: [
+          { id: 's1', name: 'Shower', minutes: 15 },
+          { id: 's2', name: 'Dress', minutes: 0 },
+          { id: 's3', name: 'Breakfast', minutes: 20 },
+        ],
+      }),
+    ]);
+    // Breakfast first: still on the shower, its time counted from that tick
+    s.days[KEY] = { ...emptyDay(), stepsDone: { a: [null, null, at('08:20')] } };
+    expect(snapshot(s, at('08:25')).step).toMatchObject({ index: 0, sinceMs: at('08:20'), remainingMs: 10 * 60_000 });
+    // Then the shower: on to getting dressed
+    s.days[KEY].stepsDone.a = [at('08:30'), null, at('08:20')];
+    expect(snapshot(s, at('08:31')).step).toMatchObject({ index: 1 });
+    s.days[KEY].stepsDone.a = [at('08:30'), at('08:32'), at('08:20')];
+    expect(snapshot(s, at('08:33')).step).toBeNull();
   });
 });
 
@@ -137,6 +157,20 @@ describe('prompts', () => {
     expect(snapshot(s, at('06:40')).current).toBeNull();
     expect(snapshot(s, at('07:10')).current).toBeNull();
     expect(planFor(s, WED).find((p) => p.id === 'wake')).toMatchObject({ start: '05:50', end: '06:35', planStart: '07:00' });
+  });
+
+  it('stops asking about a pop-up once it is closed, and moves on to the next', () => {
+    const s = stateWith([block('a', '08:00', '09:00'), block('b', '09:00', '09:30'), block('study', '09:30', '11:00', { optional: true })]);
+    s.days[KEY] = { ...emptyDay(), dismissed: ['review:a'] };
+    // a's review is closed, so b's comes up once b ends
+    expect(snapshot(s, at('09:10')).prompt?.kind).toBe('intention');
+    expect(snapshot(s, at('09:40')).prompt).toMatchObject({ kind: 'review', block: { id: 'b' } });
+    s.days[KEY].dismissed.push('review:b');
+    expect(snapshot(s, at('09:40')).prompt?.kind).toBe('start');
+    s.days[KEY].dismissed.push('start:study');
+    const quiet = snapshot(s, at('09:40'));
+    expect(quiet.prompt).toBeNull();
+    expect(quiet.awaitingStart).toBe(true);
   });
 
   it('leaves blocks that ended hours ago to the planner', () => {

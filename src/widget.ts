@@ -5,10 +5,10 @@ import { invoke } from '@tauri-apps/api/core';
 import { LogicalSize, PhysicalPosition } from '@tauri-apps/api/dpi';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Window, currentMonitor, getCurrentWindow } from '@tauri-apps/api/window';
-import { checkIn, checkOut, dismissIntention, finishReturn, fireEvent, logBlock, setIntention, skipToday, snooze, startBlock, stepDone, stepUndo } from './actions';
+import { checkIn, checkOut, dismissIntention, dismissPrompt, finishReturn, fireEvent, logBlock, setIntention, skipToday, snooze, startBlock, toggleStep } from './actions';
 import { chime, notify, playTune, unlockAudioOnClick } from './alerts';
 import { h } from './dom';
-import { type Planned, type Prompt, type Snapshot, anchorLabel, dayRecord, escalation, shifted, snapshot, stepGuide } from './engine';
+import { type Planned, type Prompt, type Snapshot, anchorLabel, dayRecord, escalation, shifted, snapshot, stepGuide, stepsDoneCount } from './engine';
 import { type Garden, garden, growthNews } from './garden';
 import { hourLabel, hourTune, inQuietHours } from './hourly';
 import type { FocusMode } from './focus';
@@ -172,7 +172,7 @@ function renderSteps(s: Snapshot) {
   // Docked, a prompt card takes the space above the bar first
   const show = !!block && (mode === 'float' || (stepsOpen && promptEl.hidden));
   const done = block ? (dayRecord(getState(), s.key).stepsDone[block.id] ?? []) : [];
-  const key = show ? `${s.key}:${block!.id}:${done.length}:${block!.steps.map((x) => x.id).join(',')}` : '';
+  const key = show ? `${s.key}:${block!.id}:${block!.steps.map((x, i) => `${x.id}${done[i] ? '+' : ''}`).join(',')}` : '';
   stepsEl.hidden = !show;
   if (key !== stepsKey) {
     stepsKey = key;
@@ -181,20 +181,20 @@ function renderSteps(s: Snapshot) {
     } else {
       const id = block!.id;
       const total = block!.steps.length;
+      const onIndex = s.step?.index ?? -1;
       stepsEl.replaceChildren(
         h(
           'div',
           { class: 'steps-head' },
           h('span', {}, mode === 'dock' ? `${block!.name} · steps` : 'Steps'),
-          h('span', { class: 'count' }, `${Math.min(done.length, total)} of ${total} done`),
+          h('span', { class: 'count' }, `${stepsDoneCount(block!, done)} of ${total} done`),
         ),
         h(
           'ol',
           { class: 'step-list' },
           block!.steps.map((step, i) => {
-            const state = i < done.length ? 'done' : i === done.length ? 'on' : 'later';
-            // Tick the one you're on; untick only the last one ticked
-            const action = state === 'on' ? () => stepDone(s.key, id) : i === done.length - 1 ? () => stepUndo(s.key, id) : null;
+            // Any step can be ticked or unticked; the one you're on is the first not done
+            const state = done[i] ? 'done' : i === onIndex ? 'on' : 'later';
             return h(
               'li',
               { class: state },
@@ -202,10 +202,10 @@ function renderSteps(s: Snapshot) {
                 'button',
                 {
                   class: 'tick',
-                  disabled: !action,
-                  title: state === 'on' ? 'Done, next step' : action ? 'Not done yet' : '',
+                  title: state === 'done' ? 'Not done yet' : 'Mark done',
                   'aria-label': state === 'done' ? `${step.name}, done` : step.name,
-                  onClick: () => action?.(),
+                  'aria-pressed': String(state === 'done'),
+                  onClick: () => toggleStep(s.key, id, i),
                 },
                 state === 'done' ? '✓' : String(i + 1),
               ),
@@ -257,9 +257,10 @@ let extrasKey = '';
 function renderExtras(s: Snapshot) {
   if (flash && Date.now() > flash.until) flash = null;
   const parked = getState().parked.filter((p) => !p.done).length;
-  // Nothing running: the next block can start right now, whatever the clock says
-  const upcoming = !s.current && !getState().away ? s.next : null;
-  const roomy = !!upcoming && (upcoming.waiting || s.remainingMs > 3 * 60_000);
+  // Nothing running: the next block can start right now, whatever the clock says.
+  // An optional block whose "Start it?" card was closed stays one tap away too.
+  const upcoming = getState().away ? null : !s.current ? s.next : s.awaitingStart ? s.current : null;
+  const roomy = !!upcoming && !s.current && (upcoming.waiting || s.remainingMs > 3 * 60_000);
   const kind = s.prompt ? '' : flash ? `news:${flash.text}` : upcoming ? `free:${upcoming.id}:${roomy}:${parked}` : !s.current && parked ? `parked:${parked}` : '';
   if (kind === extrasKey) return;
   extrasKey = kind;
@@ -322,14 +323,20 @@ function renderCard(s: Snapshot) {
   cardKey = key;
   promptEl.hidden = !key;
   if (!key) return promptEl.replaceChildren();
-  if (away) return fill(away.back ? ritualCard(s) : awayCard(away.since));
-  if (stuck && stuck.phase !== 'go') return fill(stuckCard(stuck));
-  if (finishBlock) return fill(reviewCard(s.key, finishBlock, 'finish'));
+  if (away) return away.back ? fill(ritualCard(s), () => void finishReturn()) : fill(awayCard(away.since));
+  if (stuck && stuck.phase !== 'go') return fill(stuckCard(stuck), () => ((stuck = null), tick()));
+  if (finishBlock) return fill(reviewCard(s.key, finishBlock, 'finish'), () => ((finishing = null), tick()));
   renderPrompt(s, s.prompt!);
 }
 
 type Part = Node | string | false | null | undefined;
-const fill = (parts: Part[]) => promptEl.replaceChildren(...parts.filter((p): p is Node | string => !!p));
+
+/** Puts a card's parts in place, with a × in its corner when it can be closed. */
+function fill(parts: Part[], close?: () => void) {
+  const shown = parts.filter((p): p is Node | string => !!p);
+  if (close) shown.unshift(h('button', { class: 'card-close', title: 'Close', 'aria-label': 'Close', onClick: close }, '×'));
+  promptEl.replaceChildren(...shown);
+}
 
 function awayCard(since: number) {
   return [
@@ -453,14 +460,19 @@ function reviewCard(key: string, block: Planned, mode: 'ended' | 'finish') {
 
 function renderPrompt(s: Snapshot, p: Prompt) {
   if (p.kind === 'start') {
-    promptEl.replaceChildren(
-      h('p', {}, h('strong', {}, p.block.name), ' is on now. Start it?'),
-      h(
-        'div',
-        { class: 'actions' },
-        h('button', { class: 'primary', onClick: () => startBlock(s.key, p.block.id) }, 'Start'),
-        h('button', { onClick: () => skipToday(s.key, p.block.id) }, 'Skip today'),
-      ),
+    const later = () => dismissPrompt(s.key, 'start', p.block.id);
+    fill(
+      [
+        h('p', {}, h('strong', {}, p.block.name), ' is on now. Start it?'),
+        h(
+          'div',
+          { class: 'actions' },
+          h('button', { class: 'primary', onClick: () => startBlock(s.key, p.block.id) }, 'Start'),
+          h('button', { onClick: () => skipToday(s.key, p.block.id) }, 'Skip today'),
+          h('button', { class: 'quiet', title: 'Close for now; you can still start it from the widget', onClick: later }, 'Not now'),
+        ),
+      ],
+      later,
     );
   } else if (p.kind === 'intention') {
     const input = h('input', {
@@ -468,19 +480,23 @@ function renderPrompt(s: Snapshot, p: Prompt) {
       onKeydown: (e: KeyboardEvent) => e.key === 'Enter' && save(),
     });
     const save = () => (input.value.trim() ? setIntention(s.key, p.block.id, input.value) : dismissIntention(s.key, p.block.id));
-    promptEl.replaceChildren(
-      h('p', {}, 'Starting ', h('strong', {}, p.block.name), '. What’s your intention?'),
-      input,
-      h(
-        'div',
-        { class: 'actions' },
-        h('button', { class: 'primary', onClick: save }, 'Set'),
-        h('button', { onClick: () => dismissIntention(s.key, p.block.id) }, 'Not now'),
-        h('button', { class: 'quiet', title: 'Open focus mode', onClick: () => void openFocus() }, 'Focus'),
-      ),
+    fill(
+      [
+        h('p', {}, 'Starting ', h('strong', {}, p.block.name), '. What’s your intention?'),
+        input,
+        h(
+          'div',
+          { class: 'actions' },
+          h('button', { class: 'primary', onClick: save }, 'Set'),
+          h('button', { onClick: () => dismissIntention(s.key, p.block.id) }, 'Not now'),
+          h('button', { class: 'quiet', title: 'Open focus mode', onClick: () => void openFocus() }, 'Focus'),
+        ),
+      ],
+      () => dismissIntention(s.key, p.block.id),
     );
   } else {
-    fill(reviewCard(s.key, p.block, 'ended'));
+    // Closing it means "seen": no more reminders for it, and it can still be logged on the Today page
+    fill(reviewCard(s.key, p.block, 'ended'), () => dismissPrompt(s.key, 'review', p.block.id));
   }
 }
 

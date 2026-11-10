@@ -26,14 +26,18 @@ export function logBlock(key: string, id: string, status: BlockStatus | null, no
 }
 
 /** Tick off the step you're on; the next one starts now. */
-export function stepDone(key: string, id: string) {
-  return update((d) => void (ensureDay(d, key).stepsDone[id] ??= []).push(Date.now()));
+/** Tick a step off, or untick it: any step, in any order. */
+export function toggleStep(key: string, id: string, index: number) {
+  return update((d) => {
+    const done = (ensureDay(d, key).stepsDone[id] ??= []);
+    while (done.length <= index) done.push(null);
+    done[index] = done[index] ? null : Date.now();
+    while (done.length && !done[done.length - 1]) done.pop();
+  });
 }
 
 /** Untick the last step you ticked off. */
-export function stepUndo(key: string, id: string) {
-  return update((d) => void ensureDay(d, key).stepsDone[id]?.pop());
-}
+
 
 export function setNote(key: string, id: string, note: string) {
   return update((d) => {
@@ -85,6 +89,17 @@ export function startBlock(key: string, id: string) {
     const day = ensureDay(d, key);
     day.startedAt[id] = Date.now();
     day.override.skip = day.override.skip.filter((s) => s !== id);
+  });
+}
+
+/**
+ * Close a pop-up without answering it: seen, so it isn't asked again today and
+ * doesn't escalate. The block can still be logged or started from the planner.
+ */
+export function dismissPrompt(key: string, kind: 'review' | 'start', id: string) {
+  return update((d) => {
+    const day = ensureDay(d, key);
+    if (!day.dismissed.includes(`${kind}:${id}`)) day.dismissed.push(`${kind}:${id}`);
   });
 }
 

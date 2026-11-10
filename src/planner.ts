@@ -5,11 +5,11 @@ import { invoke } from '@tauri-apps/api/core';
 import { emit, listen } from '@tauri-apps/api/event';
 import { Window } from '@tauri-apps/api/window';
 import { open as openDialog } from '@tauri-apps/plugin-dialog';
-import { addTodo, ensureDay, fireEvent, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, stepDone, stepUndo, toggleTodo, unstartBlock } from './actions';
+import { addTodo, ensureDay, fireEvent, logBlock, removeTodo, restoreToday, setIntention, setNote, skipToday, startBlock, toggleStep, toggleTodo, unstartBlock } from './actions';
 import { chime, playTune, unlockAudioOnClick } from './alerts';
 import { hourLabel, hourTune } from './hourly';
 import { h } from './dom';
-import { type Planned, anchorLabel, dayRecord, lanes, planFor, shifted, snapshot } from './engine';
+import { type Planned, anchorLabel, dayRecord, lanes, planFor, shifted, snapshot, stepsDoneCount } from './engine';
 import {
   type Anchor,
   type Block,
@@ -270,31 +270,28 @@ function ritualGroup(p: Planned, key: string, ended: boolean) {
   );
 }
 
-/** The block's steps, ticked off in order: the same list as on the widget. */
+/** The block's steps, ticked off in any order: the same list as on the widget. */
 function stepsGroup(p: Planned, key: string) {
-  const done = dayRecord(getState(), key).stepsDone[p.id]?.length ?? 0;
+  const done = dayRecord(getState(), key).stepsDone[p.id] ?? [];
+  const onIndex = p.steps.findIndex((_, i) => !done[i]);
   return h(
     'div',
     { class: 'group' },
-    h('h3', {}, `Steps · ${Math.min(done, p.steps.length)} of ${p.steps.length} done`),
+    h('h3', {}, `Steps · ${stepsDoneCount(p, done)} of ${p.steps.length} done`),
     h(
       'ol',
       { class: 'step-checklist' },
       p.steps.map((st, i) => {
-        // Tick the next one; untick only the last one ticked
-        const canTick = !p.waiting && i === done;
-        const canUntick = i === done - 1;
         return h(
           'li',
-          { class: i < done ? 'done' : i === done ? 'on' : '' },
+          { class: done[i] ? 'done' : i === onIndex ? 'on' : '' },
           h(
             'label',
             { class: 'check' },
             h('input', {
               type: 'checkbox',
-              checked: i < done,
-              disabled: !canTick && !canUntick,
-              onChange: () => (canTick ? stepDone(key, p.id) : stepUndo(key, p.id)),
+              checked: !!done[i],
+              onChange: () => toggleStep(key, p.id, i),
             }),
             h('span', {}, `${i + 1}. ${st.name}`),
           ),

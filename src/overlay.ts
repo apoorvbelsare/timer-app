@@ -1,7 +1,7 @@
 import '@fontsource-variable/fraunces';
 import '@fontsource-variable/nunito';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { logBlock, snooze } from './actions';
+import { dismissPrompt, logBlock, snooze } from './actions';
 import { h } from './dom';
 import { type Snapshot, snapshot } from './engine';
 import { formatDuration } from './model';
@@ -45,6 +45,8 @@ function render(s: Snapshot) {
       : h('p', {}, 'That was the last block today.');
 
   card.replaceChildren(
+    // Close without answering: seen, so no more reminders; it can still be logged on the Today page
+    h('button', { class: 'card-close', title: 'Close', 'aria-label': 'Close', onClick: answer(() => dismissPrompt(s.key, 'review', p.block.id)) }, '×'),
     h('div', { class: 'dot', style: `background:${p.block.color}` }),
     h('h1', {}, 'Time to switch'),
     h('p', { class: 'lead' }, h('strong', {}, p.block.name), ` ended ${formatDuration(s.now - p.block.endMs)} ago.`),

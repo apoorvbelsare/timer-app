@@ -165,15 +165,21 @@ export function anchorLabel(state: AppState, block: Block): string {
 /** A chained block that ran or is running off its planned slot. */
 export const shifted = (p: Planned) => !p.waiting && Math.abs(p.startMs - p.planStartMs) >= 60_000;
 
+/** How many of a block's steps are ticked off. */
+export const stepsDoneCount = (block: Block, done: (number | null)[]) => block.steps.filter((_, i) => !!done[i]).length;
+
 /**
- * Steps go in order and only move on when you tick one off; the clock never
- * skips you ahead. Null once they're all done (or the block has none).
+ * The step you're on is the first one not ticked off. Steps can be ticked in
+ * any order, and the clock never skips you ahead. Null once they're all done
+ * (or the block has none).
  */
-export function currentStep(block: Block, done: number[], startMs: number, now: number): StepInfo | null {
-  const index = done.length;
+export function currentStep(block: Block, done: (number | null)[], startMs: number, now: number): StepInfo | null {
+  const index = block.steps.findIndex((_, i) => !done[i]);
   const step = block.steps[index];
   if (!step) return null;
-  const sinceMs = Math.max(done[index - 1] ?? startMs, startMs);
+  // Its time counts from the last tick, whichever step that was
+  const ticks = done.filter((t): t is number => !!t);
+  const sinceMs = Math.max(startMs, ...ticks);
   return { step, index, total: block.steps.length, sinceMs, remainingMs: step.minutes > 0 ? sinceMs + step.minutes * 60_000 - now : null };
 }
 
@@ -255,12 +261,14 @@ function pickPrompt(
       p.endMs <= now &&
       now - p.endMs < REVIEW_WINDOW_MS &&
       rec.log[p.id] === undefined &&
+      !rec.dismissed.includes(`review:${p.id}`) &&
       (!p.optional || rec.startedAt[p.id] !== undefined),
   );
   if (review) return { kind: 'review', block: review, sinceMs: review.endMs };
-  if (current && awaitingStart) return { kind: 'start', block: current, sinceMs: current.startMs };
+  if (current && awaitingStart && !rec.dismissed.includes(`start:${current.id}`)) return { kind: 'start', block: current, sinceMs: current.startMs };
   if (
     current &&
+    !awaitingStart &&
     settings.askIntention &&
     rec.intentions[current.id] === undefined &&
     current.endMs - now > INTENTION_MIN_LEFT_MS

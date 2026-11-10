@@ -81,8 +81,13 @@ export interface DayRecord {
   finishedAt: Record<string, number>;
   /** Each time an event was marked today */
   events: Record<string, number[]>;
-  /** When each of a block's steps was ticked off, in order: its length is how many are done */
-  stepsDone: Record<string, number[]>;
+  /**
+   * When each of a block's steps was ticked off, by step position; null (or
+   * missing) means not done yet. Steps can be ticked in any order.
+   */
+  stepsDone: Record<string, (number | null)[]>;
+  /** Pop-ups closed with ×, as "review:<block id>" or "start:<block id>": seen, so not asked again today */
+  dismissed: string[];
 }
 
 export type Ambient = 'off' | 'rain' | 'forest' | 'brown';
@@ -182,6 +187,7 @@ export function emptyDay(): DayRecord {
     finishedAt: {},
     events: {},
     stepsDone: {},
+    dismissed: [],
   };
 }
 

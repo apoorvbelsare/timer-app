@@ -24,7 +24,27 @@ body {
   backdrop-filter: blur(8px);
 }
 
+.card-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 22px;
+  line-height: 1;
+  cursor: pointer;
+}
+.card-close:hover {
+  background: rgba(0, 0, 0, 0.06);
+  color: var(--text);
+}
 .card {
+  position: relative;
   width: min(470px, calc(100% - 32px));
   padding: 38px 38px 28px;
   border-radius: 28px;

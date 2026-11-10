@@ -38,7 +38,7 @@ Many people with ADHD struggle to sense time passing (often called *time blindne
 - **Hourly ping:** a short tune on every hour, different for each of the 24. Morning tunes rise and sound bright, afternoon tunes go up then down, and evening tunes fall low and soft. So even a tune you haven't learned yet tells you roughly what time it is. The widget glows for a moment and says the hour plus what's on ("3 pm · 40m left in Deep work"). It stays silent during quiet hours (10pm–7am by default).
 
 ### Plan your routine
-- **Routine blocks:** each block has a time, days of the week, and a colour. It can also have **steps** in order (1 shower → 2 get dressed → 3 breakfast). The widget lists them all, numbered: tick the one you're on and the next one starts. Each step can have a rough guide time; when it runs out you get a nudge, but nothing moves on until you tick it. Click a block on the Today page and its side panel has the same checklist.
+- **Routine blocks:** each block has a time, days of the week, and a colour. It can also have **steps** in order (1 shower → 2 get dressed → 3 breakfast). The widget lists them all, numbered. **Tick any step, in any order**, and untick it if you change your mind; the highlighted step is the first one not done yet. Each step can have a rough guide time; when it runs out you get a nudge, but nothing moves on until you tick it. Click a block on the Today page and its side panel has the same checklist.
 - **Optional blocks:** for things you don't do every day. Instead of starting on their own, they ask "Start or skip?", and skipping costs nothing.
 - **Overlapping blocks:** blocks can share the same time. The one that started most recently is shown in front, and the widget lists the others as "Also on". A 10:00 call inside a 9–12 Deep work block takes over for its half hour, then Deep work comes back. On the Today page, overlapping blocks sit side by side.
 - **Just for today:** skip, move or add a one-off block for today only. Your usual routine stays as it is.
@@ -53,6 +53,7 @@ Time blindness makes "at 09:00" hard to act on; "after breakfast" is much easier
 - **I'm stuck:** the **?** on the widget (or the tray) opens a picker of tasks from your own Markdown task list: everything under a **To do** or **In progress** heading (Settings → Task list). Pick one and it gives you five minutes to just start it, then asks whether to keep going (it becomes the block's intention) or pick another.
 
 ### Stay on track
+- **Every pop-up can be closed:** the **×** in its corner closes it without answering. A closed "How did it go?" stops reminding you and can still be logged on the Today page; a closed "Start it?" leaves a **▶ Start** button on the widget.
 - **Warnings** with a soft chime and a notification before a block ends, or before the next one starts during free time.
 - **Hyperfocus guard:** when a block ends, the widget asks how it went (Done / Partly / Skipped). If you don't answer, a notification follows after 5 minutes, then a full-screen "time to switch" card after 10. "I'm still on it" gives you 10 more minutes.
 
