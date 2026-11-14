@@ -179,9 +179,15 @@ struct TrayItems {
 }
 
 /// Your events' hotkeys and which event each one marks.
+#[derive(Default)]
 struct EventKeys(Mutex<Vec<(Shortcut, String)>>);
 
-#[derive(serde::Deserialize)]
+/// The events the planner last handed over. They can arrive before the tray exists
+/// (a window may load faster than setup finishes), so they're kept to build it with.
+#[derive(Default)]
+struct EventDefs(Mutex<Vec<EventDef>>);
+
+#[derive(serde::Deserialize, Clone)]
 struct EventDef {
     id: String,
     name: String,
@@ -247,8 +253,10 @@ fn set_events(app: AppHandle, events: Vec<EventDef>) -> Result<HashMap<String, S
             }
         }
     }
-    let menu = build_menu(&app, &app.state::<TrayItems>(), &events).map_err(|e| e.to_string())?;
-    if let Some(tray) = app.tray_by_id("main") {
+    *app.state::<EventDefs>().0.lock().unwrap() = events.clone();
+    // Before setup has built the tray, setup picks the events up from EventDefs instead
+    if let (Some(items), Some(tray)) = (app.try_state::<TrayItems>(), app.tray_by_id("main")) {
+        let menu = build_menu(&app, &items, &events).map_err(|e| e.to_string())?;
         tray.set_menu(Some(menu)).map_err(|e| e.to_string())?;
     }
     Ok(errors)
@@ -271,6 +279,9 @@ fn read_task_file(path: String) -> Result<String, String> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // Managed up front, not in setup: windows can call in before setup has run
+        .manage(EventKeys::default())
+        .manage(EventDefs::default())
         // A second launch (e.g. from the Start menu) just brings the planner forward
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             show_planner(app)
@@ -322,10 +333,10 @@ pub fn run() {
                 quit: MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?,
             };
             app.manage(DockItem(items.dock.clone()));
-            let menu = build_menu(app.handle(), &items, &[])?;
+            let events = app.state::<EventDefs>().0.lock().unwrap().clone();
+            let menu = build_menu(app.handle(), &items, &events)?;
             let lock_item = items.lock.clone();
             app.manage(items);
-            app.manage(EventKeys(Mutex::new(Vec::new())));
 
             TrayIconBuilder::with_id("main")
                 .icon(app.default_window_icon().unwrap().clone())
@@ -371,6 +382,14 @@ pub fn run() {
                     }
                 })
                 .build(app)?;
+
+            // Events that arrived while the tray was being built
+            let latest = app.state::<EventDefs>().0.lock().unwrap().clone();
+            if latest.len() != events.len() {
+                if let (Some(items), Some(tray)) = (app.try_state::<TrayItems>(), app.tray_by_id("main")) {
+                    tray.set_menu(Some(build_menu(app.handle(), &items, &latest)?))?;
+                }
+            }
 
             // Another app may already own a shortcut; the tray items still work then
             let capture = Shortcut::new(Some(Modifiers::CONTROL | Modifiers::SHIFT), Code::Space);
